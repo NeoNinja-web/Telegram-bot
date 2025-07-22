@@ -29,7 +29,7 @@ USERNAME_INPUT, PRICE_INPUT, CONFIRMATION = range(3)
 # Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN', '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c')
 WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://telegram-bot-vic3.onrender.com')
-PORT = int(os.getenv('PORT', 8080))
+PORT = int(os.getenv('PORT', 10000))
 
 print(f"🔍 DEBUG: BOT_TOKEN configuré: {'✅' if BOT_TOKEN else '❌'}")
 print(f"🔍 DEBUG: WEBAPP_URL: {WEBAPP_URL}")
@@ -38,321 +38,238 @@ print(f"🔍 DEBUG: PORT: {PORT}")
 # Variables globales pour stocker les données
 user_data = {}
 
-# ===== SOLUTION 3: SERVEUR DE SANTÉ =====
+# ===== SERVEUR DE SANTÉ (PORT DIFFÉRENT) =====
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/health':
+        if self.path == '/health' or self.path == '/':
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
-            self.wfile.write(b'Bot OK')
-        elif self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            html = """
-            <!DOCTYPE html>
-            <html>
-            <head><title>Fragment Deal Bot</title></head>
-            <body>
-            <h1>🔥 Fragment Deal Bot</h1>
-            <p>✅ Bot is running!</p>
-            <p>💎 Ready to create deals</p>
-            </body>
-            </html>
-            """
-            self.wfile.write(html.encode())
+            self.wfile.write(b'OK - Fragment Deal Bot is running')
         else:
             self.send_response(404)
             self.end_headers()
-    
-    def log_message(self, format, *args):
-        pass  # Supprime les logs HTTP
 
-def run_health_server():
-    """Serveur de santé pour Render"""
+    def log_message(self, format, *args):
+        # Supprime les logs HTTP pour éviter le spam
+        pass
+
+def start_health_server():
+    """Démarrage du serveur de santé sur un port différent"""
+    # 🔧 CORRECTION : Port différent pour le serveur de santé
+    health_port = PORT + 1 if PORT != 10000 else 8080
     try:
-        server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
-        print(f"🏥 Serveur de santé démarré sur port {PORT}")
+        server = HTTPServer(('0.0.0.0', health_port), HealthHandler)
+        print(f"🏥 Serveur de santé démarré sur port {health_port}")
         server.serve_forever()
     except Exception as e:
-        print(f"❌ Erreur serveur de santé: {e}")
+        print(f"⚠️ Erreur serveur de santé: {e}")
 
-# ===== FONCTIONS UTILITAIRES =====
-def format_ton_amount(amount):
-    """Formate un montant en TON avec le symbole 💎"""
-    try:
-        num_amount = float(amount)
-        if num_amount.is_integer():
-            return f"💎{int(num_amount)}"
-        else:
-            return f"💎{num_amount:.2f}"
-    except:
-        return f"💎{amount}"
-
-def extract_amount_from_text(text):
-    """Extrait le montant numérique d'un texte"""
-    import re
-    
-    # Supprime les symboles et espaces
-    clean_text = re.sub(r'[💎\$\s,]', '', text)
-    
-    # Extrait le nombre
-    match = re.search(r'[\d.]+', clean_text)
-    if match:
-        try:
-            return float(match.group())
-        except ValueError:
-            return None
-    return None
-
-def calculate_commission(price, rate=0.05):
-    """Calcule la commission (défaut: 5%)"""
-    return price * rate
-
-# ===== GESTIONNAIRES DE COMMANDES =====
+# ===== GESTIONNAIRES TELEGRAM =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Commande /start"""
-    welcome_text = (
-        "🔥 **Fragment Deal Bot**\n\n"
-        "Créez facilement vos messages de deals Fragment.com !\n\n"
-        "💎 **Montants affichés en TON uniquement**\n"
-        "⚡ **Commission calculée automatiquement (5%)**\n"
-        "🎯 **Interface simple et intuitive**\n\n"
-        "**Commandes disponibles :**\n"
-        "• `/newdeal` - Créer un nouveau deal\n"
-        "• `/help` - Aide et instructions\n\n"
-        "✨ Commencez par créer votre premier deal !"
-    )
+    """Gestionnaire de la commande /start"""
+    user_id = update.effective_user.id
+    first_name = update.effective_user.first_name
     
-    keyboard = [[InlineKeyboardButton("🚀 Créer un deal", callback_data="start_deal")]]
+    # Interface avec bouton pour lancer un deal
+    keyboard = [[InlineKeyboardButton("🚀 Créer un nouveau deal", callback_data='start_deal')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode='Markdown')
+    welcome_message = f"""
+🔥 **Fragment Deal Bot**
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Commande /help"""
-    help_text = (
-        "📖 **Guide d'utilisation**\n\n"
-        "**1️⃣ Créer un deal :**\n"
-        "• Tapez `/newdeal`\n"
-        "• Entrez le nom d'utilisateur\n"
-        "• Entrez le prix (exemple: `1500` ou `1500.50`)\n"
-        "• Confirmez et publiez !\n\n"
-        "**💡 Formats de prix supportés :**\n"
-        "• `1500` → 💎1500\n"
-        "• `1500.50` → 💎1500.50\n"
-        "• `💎2000` → 💎2000\n\n"
-        "**⚙️ Fonctionnalités :**\n"
-        "• Commission automatique (5%)\n"
-        "• Formatage TON automatique\n"
-        "• Bouton d'action personnalisable\n\n"
-        "Besoin d'aide ? Contactez le support !"
-    )
+Salut {first_name} ! 👋
+
+Je t'aide à finaliser des deals sur Fragment de manière sécurisée.
+
+✅ **Fonctionnalités :**
+• Création de deals TON
+• Interface sécurisée  
+• Confirmations automatiques
+
+💎 **Prêt à commencer ?**
+"""
     
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    await update.message.reply_text(
+        welcome_message, 
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gestionnaire des boutons inline"""
     query = update.callback_query
     await query.answer()
     
-    if query.data == "start_deal":
-        return await start_new_deal_process(query, context)
+    if query.data == 'start_deal':
+        await start_new_deal(update, context)
 
-async def start_new_deal_process(update, context: ContextTypes.DEFAULT_TYPE):
-    """Démarre le processus de création de deal"""
-    user_id = update.from_user.id if hasattr(update, 'from_user') else update.effective_user.id
+async def start_new_deal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Démarre la création d'un nouveau deal"""
+    user_id = update.effective_user.id
     
-    user_data[user_id] = {}
+    # Interface avec Web App
+    keyboard = [[
+        InlineKeyboardButton(
+            "💎 Ouvrir l'interface", 
+            web_app={'url': WEBAPP_URL}
+        )
+    ]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    text = (
-        "🎯 **Création d'un nouveau deal**\n\n"
-        "Entrez le **nom d'utilisateur** du compte Fragment :\n\n"
-        "📝 Exemple : `@username` ou `username`\n"
-        "💡 Tapez /cancel pour annuler"
-    )
+    message = """
+🚀 **Nouveau Deal TON**
+
+Clique sur le bouton ci-dessous pour ouvrir l'interface sécurisée de création de deal.
+
+✅ **Sécurité maximale**
+✅ **Process simplifié**  
+✅ **Validation automatique**
+"""
     
-    if hasattr(update, 'edit_message_text'):
-        await update.edit_message_text(text, parse_mode='Markdown')
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
     else:
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    return USERNAME_INPUT
+        await update.message.reply_text(
+            message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
 
 async def newdeal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /newdeal"""
-    return await start_new_deal_process(update, context)
+    await start_new_deal(update, context)
+    return USERNAME_INPUT
 
 async def get_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Récupère le nom d'utilisateur"""
+    username = update.message.text
     user_id = update.effective_user.id
-    username = update.message.text.strip()
     
-    # Formatage du nom d'utilisateur
-    if not username.startswith('@'):
-        username = f"@{username}"
+    if username not in user_data:
+        user_data[username] = {}
     
-    user_data[user_id]['username'] = username
+    user_data[username]['telegram_id'] = user_id
+    context.user_data['target_username'] = username
     
-    text = (
-        f"✅ **Nom d'utilisateur :** {username}\n\n"
-        "💰 Maintenant, entrez le **prix du deal** :\n\n"
-        "📝 **Exemples :**\n"
-        "• `1500`\n"
-        "• `2000.50`\n"
-        "• `💎3000`\n\n"
-        "💡 Tapez /cancel pour annuler"
-    )
-    
-    await update.message.reply_text(text, parse_mode='Markdown')
+    await update.message.reply_text(f"✅ Username: @{username}\n\n💰 Quel est le montant du deal en TON?")
     return PRICE_INPUT
 
 async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Récupère le prix"""
-    user_id = update.effective_user.id
-    price_text = update.message.text.strip()
-    
-    # Extraction du montant numérique
-    price_amount = extract_amount_from_text(price_text)
-    
-    if price_amount is None or price_amount <= 0:
+    try:
+        price = float(update.message.text)
+        context.user_data['price'] = price
+        username = context.user_data.get('target_username')
+        
+        # Bouton de confirmation
+        keyboard = [[InlineKeyboardButton("✅ Confirmer le deal", callback_data='confirm')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        confirmation_message = f"""
+🔥 **Récapitulatif du Deal**
+
+👤 **Vendeur:** @{username}
+💰 **Prix:** {price} TON
+⏰ **Date:** {datetime.now().strftime('%d/%m/%Y à %H:%M')}
+
+🚀 **Prêt à finaliser ?**
+"""
+        
         await update.message.reply_text(
-            "❌ **Prix invalide !**\n\n"
-            "Veuillez entrer un nombre valide :\n"
-            "• `1500`\n"
-            "• `2000.50`\n"
-            "• `💎3000`"
+            confirmation_message,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
         )
+        return CONFIRMATION
+        
+    except ValueError:
+        await update.message.reply_text("❌ Veuillez entrer un montant valide en TON:")
         return PRICE_INPUT
-    
-    # Calcul de la commission
-    commission = calculate_commission(price_amount)
-    
-    # Formatage des montants
-    formatted_price = format_ton_amount(price_amount)
-    formatted_commission = format_ton_amount(commission)
-    
-    # Stockage des données
-    user_data[user_id]['price'] = price_amount
-    user_data[user_id]['formatted_price'] = formatted_price
-    user_data[user_id]['commission'] = commission
-    user_data[user_id]['formatted_commission'] = formatted_commission
-    
-    # Aperçu du message final
-    username = user_data[user_id]['username']
-    preview_text = (
-        "👀 **Aperçu du message :**\n\n"
-        "─────────────────────\n"
-        f"🔥 **FRAGMENT DEAL** 🔥\n\n"
-        f"👤 **Username:** {username}\n"
-        f"💎 **Offer Amount:** {formatted_price}\n"
-        f"💰 **Commission:** {formatted_commission}\n\n"
-        f"📅 **Date:** {datetime.now().strftime('%d/%m/%Y')}\n"
-        f"⏰ **Time:** {datetime.now().strftime('%H:%M')}\n\n"
-        f"🚀 **Status:** Available\n"
-        "─────────────────────\n\n"
-        "✅ **Confirmer et publier ?**"
-    )
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Publier", callback_data="confirm_deal"),
-            InlineKeyboardButton("❌ Annuler", callback_data="cancel_deal")
-        ],
-        [InlineKeyboardButton("✏️ Modifier", callback_data="edit_deal")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(preview_text, reply_markup=reply_markup)
-    return CONFIRMATION
 
 async def confirm_deal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirme et publie le deal"""
+    """Confirme le deal"""
     query = update.callback_query
     await query.answer()
     
-    user_id = query.from_user.id
-    
-    if query.data == "confirm_deal":
-        # Récupération des données
-        data = user_data.get(user_id, {})
-        username = data.get('username', '@username')
-        formatted_price = data.get('formatted_price', '💎0')
-        formatted_commission = data.get('formatted_commission', '💎0')
+    if query.data == 'confirm':
+        username = context.user_data.get('target_username')
+        price = context.user_data.get('price')
         
-        # Message final
-        final_message = (
-            f"🔥 **FRAGMENT DEAL** 🔥\n\n"
-            f"👤 **Username:** {username}\n"
-            f"💎 **Offer Amount:** {formatted_price}\n"
-            f"💰 **Commission:** {formatted_commission}\n\n"
-            f"📅 **Date:** {datetime.now().strftime('%d/%m/%Y')}\n"
-            f"⏰ **Time:** {datetime.now().strftime('%H:%M')}\n\n"
-            f"🚀 **Status:** Available"
-        )
-        
-        # Bouton d'action
-        keyboard = [[InlineKeyboardButton("💎 Finaliser le deal", url=WEBAPP_URL)]]
+        # Interface finale avec Web App pour le paiement
+        keyboard = [[
+            InlineKeyboardButton(
+                "💳 Finaliser le paiement", 
+                web_app={'url': f"{WEBAPP_URL}?username={username}&price={price}"}
+            )
+        ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Publication du message
-        await query.edit_message_text(final_message, reply_markup=reply_markup, parse_mode='Markdown')
+        final_message = f"""
+✅ **Deal confirmé !**
+
+🎯 **Prochaine étape:** Finaliser le paiement
+
+👤 @{username}
+💰 {price} TON
+
+🔐 **Paiement sécurisé via notre interface**
+"""
         
-        # Message de confirmation
-        await context.bot.send_message(
-            user_id,
-            "✅ **Deal publié avec succès !**\n\n"
-            "Créer un autre deal ? Tapez `/newdeal`",
+        await query.edit_message_text(
+            final_message,
+            reply_markup=reply_markup,
             parse_mode='Markdown'
         )
-        
-        # Nettoyage
-        if user_id in user_data:
-            del user_data[user_id]
-        
-        return ConversationHandler.END
     
-    elif query.data == "cancel_deal":
-        await query.edit_message_text("❌ Deal annulé. Tapez `/newdeal` pour recommencer.")
-        if user_id in user_data:
-            del user_data[user_id]
-        return ConversationHandler.END
-    
-    elif query.data == "edit_deal":
-        await query.edit_message_text(
-            "✏️ **Modification du deal**\n\n"
-            "Tapez `/newdeal` pour recommencer la création."
-        )
-        if user_id in user_data:
-            del user_data[user_id]
-        return ConversationHandler.END
+    return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Annule la conversation"""
-    user_id = update.effective_user.id
-    if user_id in user_data:
-        del user_data[user_id]
-    
-    await update.message.reply_text(
-        "❌ **Création annulée.**\n\n"
-        "Tapez `/newdeal` pour créer un nouveau deal.",
-        parse_mode='Markdown'
-    )
+    await update.message.reply_text('❌ Deal annulé.')
     return ConversationHandler.END
 
-# ===== SOLUTION 2 + 4: FONCTION PRINCIPALE AVEC WEBHOOK ET GESTION CONFLITS =====
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande d'aide"""
+    help_text = """
+🔥 **Fragment Deal Bot - Aide**
+
+**Commandes disponibles :**
+/start - Démarrer le bot
+/newdeal - Créer un nouveau deal
+/help - Afficher cette aide
+/cancel - Annuler l'opération en cours
+
+**Comment ça marche :**
+1. Utilise /newdeal
+2. Saisis le username Fragment
+3. Indique le prix en TON
+4. Confirme le deal
+5. Finalise via notre interface sécurisée
+
+💎 **Support:** Contact @support_bot
+"""
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
 def main():
-    """Fonction principale avec toutes les solutions intégrées"""
-    # Démarrage du serveur de santé en arrière-plan (Solution 3)
-    health_thread = Thread(target=run_health_server, daemon=True)
-    health_thread.start()
-    
+    """Fonction principale"""
     try:
+        # 🔧 CORRECTION : Démarrage conditionnel du serveur de santé
+        is_render = 'RENDER' in os.environ
+        
+        if is_render:
+            # Sur Render, on démarre le serveur de santé sur un port différent
+            health_thread = Thread(target=start_health_server, daemon=True)
+            health_thread.start()
+        
         # Création de l'application
         application = Application.builder().token(BOT_TOKEN).build()
         
-        # Gestionnaire de conversation pour les deals
+        # Gestionnaire de conversation corrigé
         conv_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('newdeal', newdeal),
@@ -363,7 +280,10 @@ def main():
                 PRICE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_price)],
                 CONFIRMATION: [CallbackQueryHandler(confirm_deal)]
             },
-            fallbacks=[CommandHandler('cancel', cancel)]
+            fallbacks=[CommandHandler('cancel', cancel)],
+            per_message=False,
+            per_chat=True,
+            per_user=True
         )
         
         # Ajout des gestionnaires
@@ -373,10 +293,10 @@ def main():
         
         print("🚀 Fragment Deal Bot démarré...")
         print("💎 Mode: TON uniquement")
-        print("🏥 Serveur de santé: Activé")
+        print(f"🏥 Serveur de santé: {'Activé' if is_render else 'Désactivé'}")
         
-        # Solution 2: Mode WEBHOOK (recommandé pour Render)
-        if os.getenv('RENDER'):  # Détection automatique de Render
+        if is_render:
+            # Mode webhook sur Render
             print("🌍 Mode: Webhook (Render détecté)")
             application.run_webhook(
                 listen="0.0.0.0",
@@ -386,29 +306,9 @@ def main():
                 drop_pending_updates=True
             )
         else:
-            # Solution 4: Mode polling avec gestion des conflits pour développement local
+            # Mode polling en local
             print("🔄 Mode: Polling (Local)")
-            retry_count = 0
-            max_retries = 3
-            
-            while retry_count < max_retries:
-                try:
-                    print(f"🔄 Tentative {retry_count + 1}/{max_retries}")
-                    application.run_polling(drop_pending_updates=True)
-                    break
-                except Conflict as e:
-                    retry_count += 1
-                    print(f"⚠️ Conflit détecté: {e}")
-                    if retry_count < max_retries:
-                        print("🔄 Attente de 15 secondes avant redémarrage...")
-                        import time
-                        time.sleep(15)
-                    else:
-                        print("❌ Trop de conflits. Arrêt du bot.")
-                        break
-                except Exception as e:
-                    print(f"❌ Erreur: {e}")
-                    break
+            application.run_polling(drop_pending_updates=True)
         
     except Exception as e:
         print(f"❌ Erreur lors du démarrage: {e}")
