@@ -12,23 +12,41 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 
-# Configuration du logging
+# Configuration du logging pour Render
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
-    handlers=[
-        logging.FileHandler('fragment_bot.log'),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
 # États de conversation
 USERNAME_INPUT, PRICE_INPUT, CONFIRMATION = range(3)
 
-# Configuration
-BOT_TOKEN = "7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c"  # Remplacez par votre token
-WEBAPP_URL = "https://myminiapp.onrender.com"  # URL de votre mini app
+# Configuration depuis les variables d'environnement avec debug
+BOT_TOKEN = os.getenv('7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c')
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://myminiapp.onrender.com')
+PORT = int(os.getenv('PORT', 8080))
+
+# Debug des variables d'environnement
+print(f"🔍 DEBUG: BOT_TOKEN trouvé: {'OUI' if BOT_TOKEN else 'NON'}")
+if BOT_TOKEN:
+    print(f"🔍 DEBUG: BOT_TOKEN commence par: {BOT_TOKEN[:10]}...")
+else:
+    print("🔍 DEBUG: BOT_TOKEN est None ou vide")
+    print("🔍 DEBUG: Variables d'environnement disponibles:")
+    for key, value in os.environ.items():
+        if 'TOKEN' in key.upper():
+            print(f"   {key}: {value[:10] if value else 'None'}...")
+
+print(f"🔍 DEBUG: WEBAPP_URL: {WEBAPP_URL}")
+
+# Validation du token
+if not BOT_TOKEN:
+    print("❌ ERREUR: BOT_TOKEN non configuré dans les variables d'environnement")
+    print("👉 Vérifiez la configuration sur Render.com")
+    exit(1)
+
 
 class FragmentDealBot:
     def __init__(self, token):
