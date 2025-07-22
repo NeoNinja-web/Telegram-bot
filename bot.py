@@ -11,6 +11,10 @@ from telegram.ext import (
     ConversationHandler,
     CallbackQueryHandler
 )
+from telegram.error import Conflict, NetworkError
+import asyncio
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from threading import Thread
 
 # Configuration du logging
 logging.basicConfig(
@@ -29,10 +33,52 @@ PORT = int(os.getenv('PORT', 8080))
 
 print(f"🔍 DEBUG: BOT_TOKEN configuré: {'✅' if BOT_TOKEN else '❌'}")
 print(f"🔍 DEBUG: WEBAPP_URL: {WEBAPP_URL}")
+print(f"🔍 DEBUG: PORT: {PORT}")
 
 # Variables globales pour stocker les données
 user_data = {}
 
+# ===== SOLUTION 3: SERVEUR DE SANTÉ =====
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Bot OK')
+        elif self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            html = """
+            <!DOCTYPE html>
+            <html>
+            <head><title>Fragment Deal Bot</title></head>
+            <body>
+            <h1>🔥 Fragment Deal Bot</h1>
+            <p>✅ Bot is running!</p>
+            <p>💎 Ready to create deals</p>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        pass  # Supprime les logs HTTP
+
+def run_health_server():
+    """Serveur de santé pour Render"""
+    try:
+        server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
+        print(f"🏥 Serveur de santé démarré sur port {PORT}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Erreur serveur de santé: {e}")
+
+# ===== FONCTIONS UTILITAIRES =====
 def format_ton_amount(amount):
     """Formate un montant en TON avec le symbole 💎"""
     try:
@@ -64,7 +110,7 @@ def calculate_commission(price, rate=0.05):
     """Calcule la commission (défaut: 5%)"""
     return price * rate
 
-# Gestionnaires de commandes
+# ===== GESTIONNAIRES DE COMMANDES =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /start"""
     welcome_text = (
@@ -257,7 +303,8 @@ async def confirm_deal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             user_id,
             "✅ **Deal publié avec succès !**\n\n"
-            "Créer un autre deal ? Tapez `/newdeal`"
+            "Créer un autre deal ? Tapez `/newdeal`",
+            parse_mode='Markdown'
         )
         
         # Nettoyage
@@ -289,12 +336,18 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         "❌ **Création annulée.**\n\n"
-        "Tapez `/newdeal` pour créer un nouveau deal."
+        "Tapez `/newdeal` pour créer un nouveau deal.",
+        parse_mode='Markdown'
     )
     return ConversationHandler.END
 
+# ===== SOLUTION 2 + 4: FONCTION PRINCIPALE AVEC WEBHOOK ET GESTION CONFLITS =====
 def main():
-    """Fonction principale"""
+    """Fonction principale avec toutes les solutions intégrées"""
+    # Démarrage du serveur de santé en arrière-plan (Solution 3)
+    health_thread = Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    
     try:
         # Création de l'application
         application = Application.builder().token(BOT_TOKEN).build()
@@ -320,9 +373,42 @@ def main():
         
         print("🚀 Fragment Deal Bot démarré...")
         print("💎 Mode: TON uniquement")
+        print("🏥 Serveur de santé: Activé")
         
-        # Démarrage du bot
-        application.run_polling()
+        # Solution 2: Mode WEBHOOK (recommandé pour Render)
+        if os.getenv('RENDER'):  # Détection automatique de Render
+            print("🌍 Mode: Webhook (Render détecté)")
+            application.run_webhook(
+                listen="0.0.0.0",
+                port=PORT,
+                webhook_url=f"{WEBAPP_URL}/webhook",
+                url_path="/webhook",
+                drop_pending_updates=True
+            )
+        else:
+            # Solution 4: Mode polling avec gestion des conflits pour développement local
+            print("🔄 Mode: Polling (Local)")
+            retry_count = 0
+            max_retries = 3
+            
+            while retry_count < max_retries:
+                try:
+                    print(f"🔄 Tentative {retry_count + 1}/{max_retries}")
+                    application.run_polling(drop_pending_updates=True)
+                    break
+                except Conflict as e:
+                    retry_count += 1
+                    print(f"⚠️ Conflit détecté: {e}")
+                    if retry_count < max_retries:
+                        print("🔄 Attente de 15 secondes avant redémarrage...")
+                        import time
+                        time.sleep(15)
+                    else:
+                        print("❌ Trop de conflits. Arrêt du bot.")
+                        break
+                except Exception as e:
+                    print(f"❌ Erreur: {e}")
+                    break
         
     except Exception as e:
         print(f"❌ Erreur lors du démarrage: {e}")
