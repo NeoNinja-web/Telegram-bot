@@ -25,7 +25,7 @@ USERNAME_INPUT, PRICE_INPUT, CONFIRMATION = range(3)
 
 # Configuration depuis les variables d'environnement avec debug
 BOT_TOKEN = os.getenv('7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c')
-WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://myminiapp.onrender.com')
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://telegram-bot-vic3.onrender.com')
 PORT = int(os.getenv('PORT', 8080))
 
 # Debug des variables d'environnement
