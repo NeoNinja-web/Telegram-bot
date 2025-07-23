@@ -214,7 +214,7 @@ async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         commission_usd = commission * ton_to_usd
         
         # Message de simulation Fragment avec wallet cliquable intégré
-        deal_message = f"""We have received a purchase request for your username @{username.upper()}_DEAL via Fragment.com. Below are the transaction details:
+        deal_message = f"""We have received a purchase request for your username @{username.upper()} via Fragment.com. Below are the transaction details:
 
 **• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
 • Commission: 💎{commission:g} (${commission_usd:.2f} USD)**
@@ -284,8 +284,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2. 📝 Enter Fragment username  
 3. 💰 Set price in TON
 4. 🔗 Get your deal message instantly
-
-**Support:** This bot helps simulate Fragment.com username deals.
 
 💎 **Ready to start?** Use `/start`
     """
