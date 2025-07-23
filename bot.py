@@ -22,7 +22,7 @@ BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
 FIXED_CHAT_ID = 511758924
 PORT = int(os.getenv('PORT', 10000))
 
-print(f"🤖 Fragment Deal Generator v2.4")
+print(f"🤖 Fragment Deal Generator v2.5")
 print(f"🔑 Token: ✅")
 print(f"🎯 Chat ID: {FIXED_CHAT_ID}")
 print(f"🌐 Port: {PORT}")
@@ -145,12 +145,12 @@ Important:
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /start"""
     try:
-        print(f"📥 Commande /start reçue de {update.effective_user.first_name}")
+        print(f"📥 [DEBUG] /start reçu de {update.effective_user.id}")
         
         user = update.effective_user
         chat_id = update.effective_chat.id
         
-        welcome = f"""🤖 **Fragment Deal Generator v2.4**
+        welcome = f"""🤖 **Fragment Deal Generator v2.5**
 
 Salut {user.first_name}! 
 
@@ -173,19 +173,19 @@ Ce bot génère des messages Fragment authentiques avec calculs automatiques TON
             disable_web_page_preview=True
         )
         
-        print(f"✅ /start envoyé à {user.first_name} ({chat_id})")
+        print(f"✅ [DEBUG] Réponse /start envoyée à {chat_id}")
         
     except Exception as e:
-        print(f"❌ Erreur start_handler: {e}")
+        print(f"❌ [DEBUG] Erreur start_handler: {e}")
         try:
             await update.message.reply_text("❌ Erreur lors du démarrage. Réessayez.")
-        except:
-            pass
+        except Exception as e2:
+            print(f"❌ [DEBUG] Erreur envoi message erreur: {e2}")
 
 async def create_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /create username price"""
     try:
-        print(f"📥 Commande /create reçue")
+        print(f"📥 [DEBUG] /create reçu avec args: {context.args}")
         
         # Validation arguments
         if len(context.args) != 2:
@@ -219,7 +219,7 @@ async def create_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Prix trop élevé (max: 1,000,000 TON)")
             return
         
-        print(f"⏳ Génération deal: @{username} - {price} TON")
+        print(f"⏳ [DEBUG] Génération deal: @{username} - {price} TON")
         
         # Message de traitement
         processing = await update.message.reply_text("⏳ **Génération...**", parse_mode='Markdown')
@@ -248,7 +248,7 @@ async def create_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown'
             )
             
-            print(f"✅ Deal créé: @{username} - {price} TON")
+            print(f"✅ [DEBUG] Deal créé: @{username} - {price} TON")
             
         else:
             await update.message.reply_text("❌ Erreur lors de la génération du deal")
@@ -260,16 +260,16 @@ async def create_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
             
     except Exception as e:
-        print(f"❌ Erreur create_handler: {e}")
+        print(f"❌ [DEBUG] Erreur create_handler: {e}")
         try:
             await update.message.reply_text(f"❌ Erreur: {str(e)}")
-        except:
-            pass
+        except Exception as e2:
+            print(f"❌ [DEBUG] Erreur envoi message erreur: {e2}")
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /help"""
     try:
-        print(f"📥 Commande /help reçue")
+        print(f"📥 [DEBUG] /help reçu de {update.effective_user.id}")
         
         help_text = """📖 **Guide Fragment Deal Generator**
 
@@ -295,7 +295,7 @@ Générer des messages Fragment.com authentiques avec calculs TON/USD automatiqu
 **✅ Format généré:**
 Le bot crée des messages Fragment professionnels avec tous les détails techniques (device, IP, wallet) comme les vrais.
 
-💎 **Ready to generate Fragment deals!**"""
+💎 **Ready to generate authentic Fragment deals!**"""
         
         await update.message.reply_text(
             help_text,
@@ -303,120 +303,182 @@ Le bot crée des messages Fragment professionnels avec tous les détails techniq
             disable_web_page_preview=True
         )
         
-        print("✅ /help envoyé")
+        print("✅ [DEBUG] /help envoyé")
         
     except Exception as e:
-        print(f"❌ Erreur help_handler: {e}")
+        print(f"❌ [DEBUG] Erreur help_handler: {e}")
         try:
             await update.message.reply_text("❌ Erreur lors de l'affichage de l'aide")
-        except:
-            pass
+        except Exception as e2:
+            print(f"❌ [DEBUG] Erreur envoi message erreur: {e2}")
 
 # ===== BOT DANS THREAD =====
-def bot_worker():
-    """Lance le bot dans un thread séparé avec sa propre boucle"""
+async def run_telegram_bot():
+    """Lance le bot Telegram avec sa propre logique"""
     global bot_running, app
     
     try:
+        print("🚀 [BOT] Configuration du bot...")
+        
+        # Création de l'application avec configuration optimisée
+        app = Application.builder() \
+            .token(BOT_TOKEN) \
+            .read_timeout(30) \
+            .write_timeout(30) \
+            .connect_timeout(30) \
+            .pool_timeout=30 \
+            .get_updates_read_timeout=30 \
+            .get_updates_write_timeout=30 \
+            .get_updates_connect_timeout=30 \
+            .get_updates_pool_timeout=30 \
+            .build()
+        
+        # Ajout des gestionnaires
+        app.add_handler(CommandHandler("start", start_handler))
+        app.add_handler(CommandHandler("create", create_handler))
+        app.add_handler(CommandHandler("help", help_handler))
+        
+        print("✅ [BOT] Gestionnaires ajoutés")
+        
+        # Test de connexion
+        print("🔍 [BOT] Test de connexion...")
+        bot_info = await app.bot.get_me()
+        print(f"✅ [BOT] Connecté: @{bot_info.username} (ID: {bot_info.id})")
+        
+        # Initialisation
+        await app.initialize()
+        await app.start()
+        
+        bot_running = True
+        print("🟢 [BOT] Bot démarré et prêt!")
+        
+        # Polling avec retry automatique
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                print(f"🔄 [BOT] Début polling (tentative {retry_count + 1}/{max_retries})...")
+                
+                # Démarrage du polling
+                await app.updater.start_polling(
+                    poll_interval=2.0,
+                    timeout=20,
+                    bootstrap_retries=5,
+                    read_timeout=30,
+                    write_timeout=30,
+                    connect_timeout=30,
+                    pool_timeout=30
+                )
+                
+                print("✅ [BOT] Polling actif!")
+                
+                # Boucle d'attente infinie
+                import signal
+                stop_signals = [signal.SIGINT, signal.SIGTERM, signal.SIGABRT]
+                
+                for sig in stop_signals:
+                    try:
+                        signal.signal(sig, lambda s, f: None)
+                    except:
+                        pass
+                
+                # Attente active avec vérification périodique
+                while bot_running:
+                    await asyncio.sleep(10)
+                    
+                    # Test de santé périodique
+                    try:
+                        await app.bot.get_me()
+                    except Exception as health_error:
+                        print(f"⚠️ [BOT] Problème de santé: {health_error}")
+                        raise health_error
+                
+                break  # Sortie de boucle si tout va bien
+                
+            except Exception as polling_error:
+                retry_count += 1
+                print(f"❌ [BOT] Erreur polling (tentative {retry_count}): {polling_error}")
+                
+                if retry_count < max_retries:
+                    print(f"⏳ [BOT] Retry dans 10 secondes...")
+                    await asyncio.sleep(10)
+                else:
+                    print(f"💥 [BOT] Échec après {max_retries} tentatives")
+                    raise polling_error
+        
+    except Exception as e:
+        print(f"💥 [BOT] Erreur critique: {e}")
+        bot_running = False
+        raise
+        
+    finally:
+        print("🛑 [BOT] Arrêt du bot...")
+        bot_running = False
+        
+        try:
+            if app:
+                await app.stop()
+                await app.shutdown()
+        except Exception as e:
+            print(f"⚠️ [BOT] Erreur arrêt: {e}")
+
+def bot_worker():
+    """Worker thread pour le bot avec boucle asyncio dédiée"""
+    try:
+        print("🧵 [THREAD] Démarrage thread bot...")
+        
         # Nouvelle boucle pour ce thread
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        async def run_telegram_bot():
-            global bot_running
-            
-            try:
-                print("🚀 Configuration du bot...")
-                
-                # Création de l'application
-                app = Application.builder() \
-                    .token(BOT_TOKEN) \
-                    .read_timeout(30) \
-                    .write_timeout(30) \
-                    .connect_timeout(30) \
-                    .pool_timeout(30) \
-                    .build()
-                
-                # Ajout des gestionnaires
-                app.add_handler(CommandHandler("start", start_handler))
-                app.add_handler(CommandHandler("create", create_handler))
-                app.add_handler(CommandHandler("help", help_handler))
-                
-                print("✅ Bot configuré")
-                print("📋 **Commandes disponibles:**")
-                print("   • /start - Démarrage")
-                print("   • /create username price - Créer deal")
-                print("   • /help - Aide")
-                print("🔄 Démarrage du polling...")
-                
-                bot_running = True
-                
-                # Test de connexion
-                bot_info = await app.bot.get_me()
-                print(f"✅ Bot connecté: @{bot_info.username}")
-                
-                # Polling
-                await app.run_polling(
-                    poll_interval=2.0,
-                    timeout=20,
-                    bootstrap_retries=3,
-                    read_timeout=30,
-                    write_timeout=30,
-                    connect_timeout=30,
-                    pool_timeout=30,
-                    stop_signals=None,
-                    close_loop=False
-                )
-                
-            except Exception as e:
-                print(f"❌ Erreur bot: {e}")
-                bot_running = False
-                
-            finally:
-                bot_running = False
-                print("🛑 Bot arrêté")
+        print("🔄 [THREAD] Lancement bot asyncio...")
         
         # Lancement du bot
         loop.run_until_complete(run_telegram_bot())
         
     except Exception as e:
-        print(f"❌ Erreur bot worker: {e}")
-        bot_running = False
+        print(f"💥 [THREAD] Erreur thread bot: {e}")
         
     finally:
-        try:
-            loop.close()
-        except:
-            pass
+        print("🔚 [THREAD] Fin thread bot")
 
 # ===== FONCTION PRINCIPALE =====
 def main():
-    """Point d'entrée principal avec architecture thread"""
-    print("🚀 **Fragment Deal Generator v2.4**")
+    """Point d'entrée principal optimisé Render"""
+    print("🚀 **Fragment Deal Generator v2.5**")
     print(f"🌐 URL: https://telegram-bot-vic3.onrender.com")
     print("=" * 60)
     
     try:
-        # 1. Lancement du bot dans un thread
-        print("🤖 Démarrage du bot Telegram...")
-        bot_thread = threading.Thread(target=bot_worker, daemon=False)
+        # 1. Lancement du bot dans thread dédié
+        print("🤖 [MAIN] Démarrage bot thread...")
+        bot_thread = threading.Thread(target=bot_worker, daemon=False, name="TelegramBot")
         bot_thread.start()
         
-        # 2. Attente stabilisation bot
-        time.sleep(3)
+        # 2. Attente stabilisation
+        print("⏳ [MAIN] Stabilisation bot (5s)...")
+        time.sleep(5)
         
-        # 3. Serveur HTTP (bloquant) dans le thread principal
-        print("🌐 Lancement serveur HTTP...")
-        start_http_server()  # Bloque ici pour maintenir le service
+        # 3. Vérification statut bot
+        if bot_thread.is_alive():
+            print("✅ [MAIN] Bot thread actif")
+        else:
+            print("❌ [MAIN] Bot thread mort")
+        
+        # 4. Serveur HTTP (bloquant)
+        print("🌐 [MAIN] Lancement serveur HTTP (bloquant)...")
+        start_http_server()  # Bloque pour maintenir le service Render
         
     except KeyboardInterrupt:
-        print("\n🛑 Arrêt demandé")
+        print("\n🛑 [MAIN] Arrêt demandé par utilisateur")
         
     except Exception as e:
-        print(f"❌ Erreur critique: {e}")
+        print(f"💥 [MAIN] Erreur critique: {e}")
         
     finally:
-        print("🔚 Application fermée")
+        bot_running = False
+        print("🔚 [MAIN] Application fermée")
 
 if __name__ == '__main__':
     main()
