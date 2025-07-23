@@ -271,13 +271,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • `/test username price` - Tester un message
 • `/help` - Cette aide
 
-**Utilisation via API:**
-POST /send-message
-{
-"username": "crypto",
-"price": 1000
-}
-
 **Fonctionnalités:**
 ✅ Messages Fragment automatiques
 ✅ Calcul prix TON en temps réel  
