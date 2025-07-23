@@ -1,23 +1,14 @@
-import logging
 import asyncio
 import aiohttp
-import signal
 import sys
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.error import NetworkError, TimedOut, Conflict
 
-# Configuration simplifiée du logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    force=True
-)
-logger = logging.getLogger(__name__)
-
-# Réduction des logs externes
-logging.getLogger('httpx').setLevel(logging.WARNING)
-logging.getLogger('telegram').setLevel(logging.WARNING)
+# Configuration simple du logging
+import logging
+logging.basicConfig(level=logging.WARNING)
 
 # Configuration
 BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
@@ -25,9 +16,6 @@ FIXED_CHAT_ID = 511758924
 
 print(f"🔍 DEBUG: BOT_TOKEN configuré: ✅")
 print(f"🔍 DEBUG: CHAT_ID fixe: {FIXED_CHAT_ID}")
-
-# Variable globale pour l'application
-app = None
 
 # ===== FONCTION PRIX TON =====
 async def get_ton_price():
@@ -86,22 +74,18 @@ Important:
         print(f"Erreur génération message: {e}")
         return None, None
 
-# ===== GESTIONNAIRE D'ERREURS =====
+# ===== GESTIONNAIRE D'ERREURS SIMPLE =====
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire global des erreurs"""
-    print(f"Exception while handling an update: {context.error}")
-    
-    # Gestion spécifique des erreurs réseau
-    if isinstance(context.error, (NetworkError, TimedOut)):
-        print("Erreur réseau détectée, tentative de reconnexion...")
-        return
-    
-    # Gestion des conflits de polling
-    if isinstance(context.error, Conflict):
-        print("Conflit de polling détecté - arrêt du bot")
-        if app:
-            await app.stop()
-        return
+    """Gestionnaire d'erreurs simplifié"""
+    try:
+        error = context.error
+        if isinstance(error, Conflict):
+            print("❌ Conflit détecté - redémarrage nécessaire")
+            os._exit(1)  # Forcer l'arrêt complet
+        else:
+            print(f"Erreur: {error}")
+    except Exception:
+        pass
 
 # ===== COMMANDES TELEGRAM =====
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,8 +113,6 @@ Ce bot génère automatiquement des messages Fragment personnalisés.
         
     except Exception as e:
         print(f"Erreur start_command: {e}")
-        if update and update.message:
-            await update.message.reply_text("❌ Erreur lors de l'exécution de la commande")
 
 async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /create username price"""
@@ -147,14 +129,14 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             price = float(context.args[1])
         except ValueError:
-            await update.message.reply_text("❌ Format de prix invalide (utilisez des chiffres)")
+            await update.message.reply_text("❌ Format de prix invalide")
             return
         
         if price <= 0:
             await update.message.reply_text("❌ Le prix doit être supérieur à 0")
             return
             
-        # Message de confirmation
+        # Message de génération
         await update.message.reply_text(
             f"⏳ **Génération du deal...**\n"
             f"👤 Username: @{username}\n"
@@ -162,109 +144,158 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         
-        print(f"🔄 Génération du deal pour @{username} - {price} TON")
+        print(f"🔄 Génération deal @{username} - {price} TON")
         
         # Génération du message
         message, reply_markup = await generate_fragment_message(username, price)
         
         if message and reply_markup:
-            # Envoi du message Fragment
             await update.message.reply_text(
                 message,
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
             
-            # Confirmation de succès
             await update.message.reply_text(
-                f"✅ **Deal créé avec succès!**\n"
-                f"🎯 Message Fragment généré pour @{username}\n"
-                f"💎 Montant: {price} TON\n"
-                f"🔗 Bouton WebApp ajouté",
+                f"✅ **Deal créé!**\n"
+                f"🎯 @{username} - {price} TON",
                 parse_mode='Markdown'
             )
             
-            print(f"✅ Deal créé avec succès pour @{username} - {price} TON")
+            print(f"✅ Deal créé: @{username} - {price} TON")
         else:
-            await update.message.reply_text("❌ Erreur lors de la génération du message")
-            print(f"❌ Erreur génération pour @{username}")
+            await update.message.reply_text("❌ Erreur génération")
             
     except Exception as e:
         print(f"Erreur create_command: {e}")
-        if update and update.message:
-            await update.message.reply_text(f"❌ Erreur: Une erreur s'est produite")
+        try:
+            await update.message.reply_text("❌ Erreur système")
+        except:
+            pass
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande d'aide"""
     try:
         help_text = """🤖 **Fragment Deal Generator - Aide**
 
-**Commandes disponibles:**
-• `/start` - Informations et Chat ID
-• `/create username price` - Créer un message Fragment
+**Commandes:**
+• `/start` - Informations
+• `/create username price` - Créer un deal
 • `/help` - Cette aide
 
-**Fonctionnalités:**
-✅ Messages Fragment automatiques
-✅ Calcul prix TON en temps réel  
-✅ Boutons WebApp intégrés
-✅ Commission 5% calculée automatiquement
-
-**Exemple d'utilisation:**
+**Exemple:**
 `/create crypto 1500`
 
-💎 **Bot prêt à l'emploi!**"""
+💎 **Bot prêt!**"""
         
         await update.message.reply_text(help_text, parse_mode='Markdown')
-        print(f"✅ Commande /help exécutée")
+        print("✅ Help affiché")
         
     except Exception as e:
-        print(f"Erreur help_command: {e}")
-        if update and update.message:
-            await update.message.reply_text("❌ Erreur lors de l'affichage de l'aide")
+        print(f"Erreur help: {e}")
+
+# ===== FONCTION FORCE STOP =====
+async def force_stop_bot():
+    """Force l'arrêt des autres instances"""
+    try:
+        print("🔄 Tentative d'arrêt forcé des autres instances...")
+        
+        # Création d'une app temporaire pour forcer l'arrêt
+        temp_app = Application.builder().token(BOT_TOKEN).build()
+        
+        try:
+            await temp_app.initialize()
+            # Essai de récupération d'updates pour déclencher le conflit
+            await temp_app.bot.get_updates(timeout=1, limit=1)
+            await temp_app.shutdown()
+        except Conflict:
+            print("✅ Instance précédente arrêtée")
+            await asyncio.sleep(3)  # Attendre l'arrêt complet
+        except Exception as e:
+            print(f"Erreur force_stop: {e}")
+        
+    except Exception as e:
+        print(f"Erreur force_stop_bot: {e}")
 
 # ===== FONCTION PRINCIPALE =====
-def main():
-    """Fonction principale"""
-    global app
-    
+async def run_bot():
+    """Lance le bot de manière asynchrone"""
     try:
-        print("🚀 Initialisation du Fragment Deal Generator...")
+        print("🚀 Démarrage Fragment Deal Generator...")
         
-        # Application Telegram avec configuration simplifiée
+        # Force l'arrêt des autres instances
+        await force_stop_bot()
+        
+        # Création de l'application
         app = Application.builder().token(BOT_TOKEN).build()
         
-        # Ajout du gestionnaire d'erreurs
+        # Ajout des handlers
         app.add_error_handler(error_handler)
-        
-        # Ajout des gestionnaires de commandes
         app.add_handler(CommandHandler("start", start_command))
         app.add_handler(CommandHandler("create", create_command))
         app.add_handler(CommandHandler("help", help_command))
         
-        print("✅ Bot configuré avec succès")
-        print(f"💎 Chat ID configuré: {FIXED_CHAT_ID}")
-        print(f"🔗 WebApp: BidRequestWebApp_bot/WebApp")
-        print("🤖 Mode: Autonome (commandes Telegram)")
-        print("🛡️ Gestionnaire d'erreurs: Activé")
-        print("\n📋 Commandes disponibles:")
-        print("   • /start - Démarrer le bot")
-        print("   • /create username price - Créer un deal")
+        print("✅ Bot configuré")
+        print(f"💎 Chat ID: {FIXED_CHAT_ID}")
+        print("🔗 WebApp: BidRequestWebApp_bot/WebApp")
+        print("\n📋 Commandes:")
+        print("   • /start - Démarrer")
+        print("   • /create username price - Créer deal")
         print("   • /help - Aide")
-        print("\n🔄 Démarrage du polling...")
         
-        # Démarrage en polling simplifié
-        app.run_polling(drop_pending_updates=True)
+        # Initialisation
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(
+            drop_pending_updates=True,
+            allowed_updates=['message']
+        )
         
-    except KeyboardInterrupt:
-        print("\n🛑 Arrêt demandé par l'utilisateur")
+        print("🟢 Bot démarré avec succès!")
+        
+        # Boucle infinie pour maintenir le bot en vie
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            print("\n🛑 Arrêt demandé")
+            
+    except Conflict as e:
+        print(f"❌ Conflit persistant: {e}")
+        print("🔄 Redémarrage dans 5 secondes...")
+        await asyncio.sleep(5)
+        os._exit(1)  # Force restart
         
     except Exception as e:
         print(f"❌ Erreur critique: {e}")
-        sys.exit(1)
+        os._exit(1)
         
     finally:
-        print("🔚 Bot arrêté")
+        try:
+            await app.updater.stop()
+            await app.stop()
+            await app.shutdown()
+            print("🔚 Bot arrêté proprement")
+        except:
+            pass
+
+# ===== POINT D'ENTRÉE =====
+def main():
+    """Point d'entrée principal"""
+    try:
+        # Configuration de la boucle d'événements
+        if sys.platform.startswith('win'):
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        
+        # Lancement du bot
+        asyncio.run(run_bot())
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Arrêt par utilisateur")
+        
+    except Exception as e:
+        print(f"❌ Erreur main: {e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
