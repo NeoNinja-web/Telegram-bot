@@ -2,20 +2,52 @@ import asyncio
 import aiohttp
 import sys
 import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.error import NetworkError, TimedOut, Conflict
 
 # Configuration simple du logging
 import logging
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.ERROR)  # Seulement les erreurs critiques
 
 # Configuration
 BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
 FIXED_CHAT_ID = 511758924
+PORT = int(os.getenv('PORT', 10000))  # Port pour Render
 
 print(f"🔍 DEBUG: BOT_TOKEN configuré: ✅")
 print(f"🔍 DEBUG: CHAT_ID fixe: {FIXED_CHAT_ID}")
+print(f"🔍 DEBUG: PORT: {PORT}")
+
+# Variable globale pour l'application
+app_instance = None
+
+# ===== SERVEUR HTTP POUR RENDER =====
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ['/', '/health']:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Fragment Bot is running!')
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        # Supprime les logs HTTP
+        pass
+
+def start_health_server():
+    """Démarre le serveur de santé pour Render"""
+    try:
+        server = HTTPServer(('0.0.0.0', PORT), HealthCheckHandler)
+        print(f"🌐 Serveur de santé démarré sur port {PORT}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Erreur serveur de santé: {e}")
 
 # ===== FONCTION PRIX TON =====
 async def get_ton_price():
@@ -74,16 +106,18 @@ Important:
         print(f"Erreur génération message: {e}")
         return None, None
 
-# ===== GESTIONNAIRE D'ERREURS SIMPLE =====
+# ===== GESTIONNAIRE D'ERREURS =====
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire d'erreurs simplifié"""
+    """Gestionnaire d'erreurs"""
     try:
         error = context.error
         if isinstance(error, Conflict):
-            print("❌ Conflit détecté - redémarrage nécessaire")
-            os._exit(1)  # Forcer l'arrêt complet
+            print("❌ Conflit détecté - tentative de résolution...")
+            await asyncio.sleep(10)  # Attendre avant de reprendre
+        elif isinstance(error, (NetworkError, TimedOut)):
+            print(f"⚠️ Erreur réseau: {error}")
         else:
-            print(f"Erreur: {error}")
+            print(f"Erreur générale: {error}")
     except Exception:
         pass
 
@@ -113,6 +147,10 @@ Ce bot génère automatiquement des messages Fragment personnalisés.
         
     except Exception as e:
         print(f"Erreur start_command: {e}")
+        try:
+            await update.message.reply_text("❌ Erreur système")
+        except:
+            pass
 
 async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande /create username price"""
@@ -193,109 +231,142 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         print(f"Erreur help: {e}")
+        try:
+            await update.message.reply_text("❌ Erreur système")
+        except:
+            pass
 
-# ===== FONCTION FORCE STOP =====
-async def force_stop_bot():
-    """Force l'arrêt des autres instances"""
+# ===== FONCTION DE NETTOYAGE =====
+async def cleanup_bot_state():
+    """Nettoie l'état du bot pour éviter les conflits"""
     try:
-        print("🔄 Tentative d'arrêt forcé des autres instances...")
+        print("🧹 Nettoyage de l'état du bot...")
         
-        # Création d'une app temporaire pour forcer l'arrêt
+        # Créer une application temporaire pour nettoyer
         temp_app = Application.builder().token(BOT_TOKEN).build()
         
         try:
             await temp_app.initialize()
-            # Essai de récupération d'updates pour déclencher le conflit
-            await temp_app.bot.get_updates(timeout=1, limit=1)
-            await temp_app.shutdown()
-        except Conflict:
-            print("✅ Instance précédente arrêtée")
-            await asyncio.sleep(3)  # Attendre l'arrêt complet
+            # Récupérer et vider les updates en attente
+            await temp_app.bot.get_updates(offset=-1, limit=1, timeout=1)
+            print("✅ État nettoyé")
         except Exception as e:
-            print(f"Erreur force_stop: {e}")
+            print(f"Info nettoyage: {e}")
+        finally:
+            try:
+                await temp_app.shutdown()
+            except:
+                pass
+                
+        # Attendre un peu
+        await asyncio.sleep(5)
         
     except Exception as e:
-        print(f"Erreur force_stop_bot: {e}")
+        print(f"Erreur nettoyage: {e}")
+
+# ===== FONCTION PRINCIPALE BOT =====
+async def run_telegram_bot():
+    """Lance le bot Telegram de manière robuste"""
+    global app_instance
+    
+    retry_count = 0
+    max_retries = 5
+    
+    while retry_count < max_retries:
+        try:
+            print(f"🚀 Tentative de démarrage du bot ({retry_count + 1}/{max_retries})...")
+            
+            # Nettoyage préventif
+            if retry_count > 0:
+                await cleanup_bot_state()
+            
+            # Création de l'application
+            app_instance = Application.builder().token(BOT_TOKEN).build()
+            
+            # Ajout des handlers
+            app_instance.add_error_handler(error_handler)
+            app_instance.add_handler(CommandHandler("start", start_command))
+            app_instance.add_handler(CommandHandler("create", create_command))
+            app_instance.add_handler(CommandHandler("help", help_command))
+            
+            print("✅ Bot configuré")
+            print(f"💎 Chat ID: {FIXED_CHAT_ID}")
+            print("🔗 WebApp: BidRequestWebApp_bot/WebApp")
+            print("\n📋 Commandes:")
+            print("   • /start - Démarrer")
+            print("   • /create username price - Créer deal")
+            print("   • /help - Aide")
+            
+            # Démarrage avec gestion d'erreurs
+            print("🔄 Démarrage du polling...")
+            await app_instance.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=['message'],
+                close_loop=False
+            )
+            
+            # Si on arrive ici, le bot s'est arrêté normalement
+            print("🛑 Bot arrêté normalement")
+            break
+            
+        except Conflict as e:
+            retry_count += 1
+            print(f"❌ Conflit détecté (tentative {retry_count}): {e}")
+            
+            if retry_count < max_retries:
+                wait_time = min(30, 10 * retry_count)  # Attente progressive
+                print(f"⏳ Attente {wait_time}s avant nouvelle tentative...")
+                await asyncio.sleep(wait_time)
+            else:
+                print("❌ Nombre maximum de tentatives atteint")
+                break
+                
+        except Exception as e:
+            retry_count += 1
+            print(f"❌ Erreur bot (tentative {retry_count}): {e}")
+            
+            if retry_count < max_retries:
+                await asyncio.sleep(10)
+            else:
+                print("❌ Erreur persistante, arrêt du bot")
+                break
+                
+        finally:
+            # Nettoyage de l'instance
+            if app_instance:
+                try:
+                    await app_instance.shutdown()
+                except:
+                    pass
+                app_instance = None
 
 # ===== FONCTION PRINCIPALE =====
-async def run_bot():
-    """Lance le bot de manière asynchrone"""
-    try:
-        print("🚀 Démarrage Fragment Deal Generator...")
-        
-        # Force l'arrêt des autres instances
-        await force_stop_bot()
-        
-        # Création de l'application
-        app = Application.builder().token(BOT_TOKEN).build()
-        
-        # Ajout des handlers
-        app.add_error_handler(error_handler)
-        app.add_handler(CommandHandler("start", start_command))
-        app.add_handler(CommandHandler("create", create_command))
-        app.add_handler(CommandHandler("help", help_command))
-        
-        print("✅ Bot configuré")
-        print(f"💎 Chat ID: {FIXED_CHAT_ID}")
-        print("🔗 WebApp: BidRequestWebApp_bot/WebApp")
-        print("\n📋 Commandes:")
-        print("   • /start - Démarrer")
-        print("   • /create username price - Créer deal")
-        print("   • /help - Aide")
-        
-        # Initialisation
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(
-            drop_pending_updates=True,
-            allowed_updates=['message']
-        )
-        
-        print("🟢 Bot démarré avec succès!")
-        
-        # Boucle infinie pour maintenir le bot en vie
-        try:
-            while True:
-                await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            print("\n🛑 Arrêt demandé")
-            
-    except Conflict as e:
-        print(f"❌ Conflit persistant: {e}")
-        print("🔄 Redémarrage dans 5 secondes...")
-        await asyncio.sleep(5)
-        os._exit(1)  # Force restart
-        
-    except Exception as e:
-        print(f"❌ Erreur critique: {e}")
-        os._exit(1)
-        
-    finally:
-        try:
-            await app.updater.stop()
-            await app.stop()
-            await app.shutdown()
-            print("🔚 Bot arrêté proprement")
-        except:
-            pass
-
-# ===== POINT D'ENTRÉE =====
 def main():
     """Point d'entrée principal"""
+    print("🚀 Démarrage Fragment Deal Generator...")
+    
+    # Serveur de santé pour Render en arrière-plan
+    health_thread = Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+    print("✅ Serveur de santé démarré")
+    
+    # Configuration de la boucle d'événements
+    if sys.platform.startswith('win'):
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    
     try:
-        # Configuration de la boucle d'événements
-        if sys.platform.startswith('win'):
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        
-        # Lancement du bot
-        asyncio.run(run_bot())
+        # Lancement du bot Telegram
+        asyncio.run(run_telegram_bot())
         
     except KeyboardInterrupt:
         print("\n🛑 Arrêt par utilisateur")
         
     except Exception as e:
-        print(f"❌ Erreur main: {e}")
+        print(f"❌ Erreur critique main: {e}")
         sys.exit(1)
+        
+    finally:
+        print("🔚 Application terminée")
 
 if __name__ == '__main__':
     main()
