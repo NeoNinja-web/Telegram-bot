@@ -73,8 +73,8 @@ Please note that a 5% commission is charged to the seller prior to accepting the
 
 Additional Information:
 • Device: Safari on macOS  
-• IP Address: 103.56.72.245
-• Wallet: '{wallet_address}'
+• IP Address: 131.111.8.46
+• Wallet: {wallet_address}
 
 Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
