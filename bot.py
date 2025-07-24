@@ -126,13 +126,16 @@ Important:
     # 5. Wallet cliquable - CORRECTION DE LA LONGUEUR
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
+        # Vérification de la longueur exacte de l'adresse
+        actual_length = len(wallet_address)  # Devrait être 48
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=len(wallet_address),  # Utilise la longueur exacte de l'adresse
+            length=actual_length,  # Utilise la longueur réelle
             url=f"https://tonviewer.com/{wallet_address}"
         ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur {len(wallet_address)} caractères")
+        print(f"🔗 Wallet link: position {wallet_start}, longueur {actual_length} caractères")
+        print(f"📝 Adresse: '{wallet_address}'")
     
     # URL du bouton - identique au bot original
     button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
@@ -180,7 +183,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         current_ton_price = get_ton_price()
         current_usd_value = ton_amount * current_ton_price
         
-        # Résultat inline - SEULEMENT si format correct
+        # Résultat inline - DÉSACTIVATION DE L'APERÇU POUR LE BOUTON AUSSI
         results = [
             InlineQueryResultArticle(
                 id=f"deal_{username}_{ton_amount}_{int(time.time())}",
@@ -189,7 +192,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 input_message_content=InputTextMessageContent(
                     fragment_message,
                     entities=entities,
-                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS (wallet ET bouton)
                 ),
                 reply_markup=keyboard
             )
