@@ -123,22 +123,22 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
+    # 5. Wallet cliquable - CORRECTION DE LA LONGUEUR
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=48,  # Longueur exacte de UQ...PR (48 caractères)
+            length=len(wallet_address),  # Utilise la longueur exacte de l'adresse
             url=f"https://tonviewer.com/{wallet_address}"
         ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
+        print(f"🔗 Wallet link: position {wallet_start}, longueur {len(wallet_address)} caractères")
     
     # URL du bouton - identique au bot original
     button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
     
     # Bouton - identique au bot original
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("View details", url=button_url, disable_web_page_preview=True)]])
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("View details", url=button_url)]])
     
     return fragment_message, entities, keyboard
 
