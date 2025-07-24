@@ -128,7 +128,7 @@ Important:
 • If you choose not to proceed, simply ignore this message."""
         
         # URL du bouton
-        button_url = f"https://t.me/BidRequestWebApp_bot/WebApp?startapp={username.lower()}-{price:g}"
+        button_url = f"https://t.me/BidRequestApp_bot?startapp={username.lower()}-{price:g}"
         
         # Bouton
         keyboard = [[InlineKeyboardButton("View details", url=button_url)]]
