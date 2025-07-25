@@ -152,7 +152,7 @@ Important:
         print(f"🔗 Wallet entity added: offset={wallet_start}, length={wallet_length}")
     
     # URL du bouton - identique au bot original
-    button_url = f"https://myminiapp.onrender.com/?startapp={username.lower()}-{price:g}"
+    button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
     
     # Bouton - identique au bot original
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("View details", url=button_url)]])
