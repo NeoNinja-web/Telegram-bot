@@ -140,7 +140,7 @@ Important:
     webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
-            "📱 View Details", 
+            "View Details", 
             web_app=WebAppInfo(url=webapp_url)
         )
     ]])
