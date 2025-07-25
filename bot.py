@@ -142,95 +142,97 @@ Important:
     
     return fragment_message, entities, keyboard
 
-async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gère les requêtes inline du bot"""
+async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gestionnaire des requêtes inline"""
     try:
-        query = update.inline_query.query.strip()
-        print(f"🔍 Requête inline reçue: '{query}'")
-        
-        # Validation de base
-        if not query:
-            await update.inline_query.answer([])
-            return
-        
-        # Parser la requête "username montant"
-        parts = query.split()
-        if len(parts) < 2:
-            await update.inline_query.answer([])
-            return
-        
-        username = parts[0].replace('@', '')
-        
-        # Validation du username
-        if not username.replace('_', '').isalnum() or len(username) < 3 or len(username) > 32:
-            await update.inline_query.answer([])
-            return
-        
-        # Parser le montant
-        try:
-            ton_amount = float(parts[1])
-            if ton_amount <= 0 or ton_amount > 1000000:
-                await update.inline_query.answer([])
-                return
-        except ValueError:
-            await update.inline_query.answer([])
-            return
-        
-        print(f"✅ Paramètres validés: {username}, {ton_amount} TON")
-        
-        # Générer le message Fragment
-        message, entities, keyboard = generate_fragment_message(username, ton_amount)
-        
-        # Créer le résultat inline
         from telegram import InlineQueryResultArticle, InputTextMessageContent
         
-        result = InlineQueryResultArticle(
-            id=f"fragment_{username}_{ton_amount}_{int(time.time())}",
-            title=f"Fragment Deal - @{username}",
-            description=f"Generate deal for 💎{ton_amount:g} TON",
-            thumbnail_url="https://i.imgur.com/fragment-icon.png",
-            input_message_content=InputTextMessageContent(
-                message_text=message,
-                entities=entities
-            ),
-            reply_markup=keyboard
-        )
+        query = update.inline_query.query.strip() if update.inline_query.query else ""
         
-        # Envoyer le résultat
-        await update.inline_query.answer([result], cache_time=1)
-        print(f"📤 Résultat inline envoyé pour {username}")
+        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        if not query:
+            await update.inline_query.answer([], cache_time=0)
+            return
+        
+        # Parsing de la requête (username montant)
+        parts = query.split()
+        
+        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        if len(parts) < 2:
+            await update.inline_query.answer([], cache_time=0)
+            return
+        
+        username = parts[0].replace('@', '')  # Supprime @ si présent
+        
+        try:
+            ton_amount = float(parts[1])
+            if ton_amount <= 0:
+                raise ValueError("Montant doit être positif")
+        except ValueError:
+            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
+            await update.inline_query.answer([], cache_time=0)
+            return
+        
+        # Génération du message avec le format exact du bot original
+        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+        
+        # Prix actuel pour l'affichage
+        current_ton_price = get_ton_price()
+        current_usd_value = ton_amount * current_ton_price
+        
+        # Résultat inline - SEULEMENT si format correct
+        results = [
+            InlineQueryResultArticle(
+                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
+                title=f"Fragment Deal: @{username}",
+                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                input_message_content=InputTextMessageContent(
+                    fragment_message,
+                    entities=entities,
+                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                ),
+                reply_markup=keyboard
+            )
+        ]
+        
+        await update.inline_query.answer(results, cache_time=0)
+        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
         
     except Exception as e:
-        print(f"❌ Erreur inline_handler: {e}")
-        await update.inline_query.answer([])
+        print(f"❌ Erreur dans inline_query_handler: {e}")
 
 class WebhookHandler(BaseHTTPRequestHandler):
-    """Gestionnaire HTTP pour les webhooks Telegram"""
+    """Gestionnaire webhook HTTP simple"""
     
     def do_POST(self):
-        """Traite les requêtes POST du webhook"""
+        """Gestion des requêtes POST"""
+        global app, event_loop
+        
         try:
-            content_length = int(self.headers.get('Content-Length', 0))
+            if self.path != f'/{BOT_TOKEN}':
+                self.send_response(404)
+                self.end_headers()
+                return
+            
+            # Lecture des données
+            content_length = int(self.headers.get('content-length', 0))
             post_data = self.rfile.read(content_length)
             
-            # Décoder et traiter l'update
+            # Parse JSON
             update_data = json.loads(post_data.decode('utf-8'))
             
-            # Créer l'objet Update
-            update = Update.de_json(update_data, app.bot)
-            
-            # Traitement asynchrone de l'update
-            if event_loop and not event_loop.is_closed():
+            # Traitement asynchrone
+            if app and event_loop:
                 asyncio.run_coroutine_threadsafe(
-                    app.process_update(update), 
+                    process_update(update_data),
                     event_loop
                 )
             
-            # Réponse HTTP 200
+            # Réponse OK
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(b'{"ok": true}')
+            self.wfile.write(b'{"ok":true}')
             
         except Exception as e:
             print(f"❌ Erreur webhook: {e}")
@@ -238,18 +240,32 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self.end_headers()
     
     def do_GET(self):
-        """Traite les requêtes GET (health check)"""
+        """Page de status simple"""
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b'Bot is running!')
+        
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
-        """Supprime les logs HTTP par défaut"""
+        """Désactiver les logs HTTP"""
         pass
 
-def start_webhook_server():
-    """Démarre le serveur webhook HTTP"""
+async def process_update(update_data):
+    """Traitement des updates Telegram"""
+    global app
+    
+    try:
+        if app:
+            update = Update.de_json(update_data, app.bot)
+            if update:
+                await app.process_update(update)
+    except Exception as e:
+        print(f"❌ Erreur traitement update: {e}")
+
+def run_webhook_server():
+    """Démarre le serveur webhook"""
     try:
         server = HTTPServer(('0.0.0.0', PORT), WebhookHandler)
         print(f"🌐 Serveur webhook démarré sur le port {PORT}")
@@ -258,42 +274,39 @@ def start_webhook_server():
         print(f"❌ Erreur serveur webhook: {e}")
 
 async def setup_bot():
-    """Configure et démarre le bot avec webhook"""
+    """Configuration du bot"""
     global app, event_loop
     
     try:
-        # Créer l'application
+        # Création de l'application
         app = Application.builder().token(BOT_TOKEN).build()
         
-        # Ajouter le gestionnaire inline
-        app.add_handler(InlineQueryHandler(inline_handler))
+        # Ajout du gestionnaire inline
+        app.add_handler(InlineQueryHandler(inline_query_handler))
         
-        # Initialiser le bot
+        # Initialisation
         await app.initialize()
+        await app.start()
         
         # Configuration du webhook
-        webhook_url = f"{WEBHOOK_URL}/webhook"
-        await app.bot.set_webhook(
-            url=webhook_url,
-            allowed_updates=["inline_query"]
-        )
+        webhook_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
+        await app.bot.set_webhook(url=webhook_url)
         
-        print(f"✅ Webhook configuré: {webhook_url}")
-        print(f"🎯 Bot prêt pour les requêtes inline")
+        print(f"✅ Bot initialisé avec webhook: {webhook_url}")
         
-        # Garder la référence de l'event loop
+        # Garde l'event loop actif
         event_loop = asyncio.get_event_loop()
         
-        # Démarrer le serveur webhook dans un thread
-        webhook_thread = threading.Thread(target=start_webhook_server, daemon=True)
+        # Démarrage du serveur webhook dans un thread séparé
+        webhook_thread = threading.Thread(target=run_webhook_server, daemon=True)
         webhook_thread.start()
         
-        # Maintenir le bot vivant
+        # Attente infinie
         while True:
             await asyncio.sleep(1)
             
     except Exception as e:
-        print(f"❌ Erreur setup_bot: {e}")
+        print(f"❌ Erreur setup bot: {e}")
         raise
 
 def main():
