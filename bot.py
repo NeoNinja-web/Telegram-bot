@@ -114,42 +114,20 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         print(f"🔍 DEBUG: Requête reçue: '{query}'")
         
-        # Si pas de requête - afficher un message d'aide
+        # Si pas de requête ou format incorrect - ne rien afficher (bot privé)
         if not query:
-            print(f"🔍 DEBUG: Pas de query, envoi aide")
-            results = [
-                InlineQueryResultArticle(
-                    id="help",
-                    title="📝 Format: username montant",
-                    description="Exemple: testuser 100",
-                    input_message_content=InputTextMessageContent(
-                        "ℹ️ Utilisez le format: @votre_bot username montant\nExemple: @votre_bot testuser 100"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Aide envoyée avec succès")
+            print(f"🔍 DEBUG: Pas de query, envoi liste vide")
+            await update.inline_query.answer([], cache_time=0)
             return
         
         # Parsing de la requête (username montant)
         parts = query.split()
         print(f"📝 DEBUG: Parties parsées: {parts}")
         
-        # Si format incorrect - afficher un message d'aide
+        # Si format incorrect - ne rien afficher (bot privé)
         if len(parts) < 2:
-            print(f"🔍 DEBUG: Format incorrect, envoi erreur")
-            results = [
-                InlineQueryResultArticle(
-                    id="error_format",
-                    title="❌ Format incorrect",
-                    description="Utilisez: username montant",
-                    input_message_content=InputTextMessageContent(
-                        f"❌ Format incorrect pour: '{query}'\n\n📝 Format attendu: username montant\nExemple: testuser 100"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Erreur format envoyée avec succès")
+            print(f"🔍 DEBUG: Format incorrect, envoi liste vide")
+            await update.inline_query.answer([], cache_time=0)
             return
         
         username = parts[0].replace('@', '')  # Supprime @ si présent
@@ -162,18 +140,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             print(f"📝 DEBUG: Montant validé: {ton_amount}")
         except ValueError as ve:
             print(f"📝 DEBUG: Erreur validation montant: {ve}")
-            results = [
-                InlineQueryResultArticle(
-                    id="error_amount",
-                    title="❌ Montant invalide",
-                    description=f"'{parts[1]}' n'est pas un nombre valide",
-                    input_message_content=InputTextMessageContent(
-                        f"❌ Montant invalide: '{parts[1]}'\n\n💡 Le montant doit être un nombre positif\nExemple: 100 ou 50.5"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Erreur montant envoyée avec succès")
+            # Ne rien afficher (bot privé)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         print(f"✅ DEBUG: Paramètres validés: '{username}' - {ton_amount} TON")
@@ -188,19 +156,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             import traceback
             print(f"❌ DEBUG: Traceback génération: {traceback.format_exc()}")
             
-            # Fallback avec message ultra simple
-            results = [
-                InlineQueryResultArticle(
-                    id="error_generation",
-                    title="❌ Erreur de génération",
-                    description="Impossible de créer le message",
-                    input_message_content=InputTextMessageContent(
-                        f"❌ Erreur génération: {str(gen_error)}"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Erreur génération envoyée")
+            # Ne rien afficher en cas d'erreur (bot privé)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         # Prix pour affichage
@@ -242,7 +199,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             import traceback
             print(f"❌ DEBUG: Traceback résultat: {traceback.format_exc()}")
             
-            # Fallback ultra simple
+            # Fallback ultra simple mais toujours fonctionnel
             try:
                 fallback_results = [
                     InlineQueryResultArticle(
@@ -258,11 +215,15 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 print("📤 DEBUG: Fallback simple envoyé avec succès")
             except Exception as fallback_error:
                 print(f"❌ DEBUG: Même le fallback a échoué: {fallback_error}")
+                # En dernier recours, liste vide
+                await update.inline_query.answer([], cache_time=0)
         
     except Exception as e:
         print(f"❌ DEBUG: Erreur critique dans inline_query_handler: {e}")
         import traceback
         print(f"❌ DEBUG: Traceback critique: {traceback.format_exc()}")
+        # En cas d'erreur critique, liste vide
+        await update.inline_query.answer([], cache_time=0)
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
