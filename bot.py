@@ -156,17 +156,37 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         
-        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        # Si pas de requête - afficher un message d'aide
         if not query:
-            await update.inline_query.answer([], cache_time=0)
+            results = [
+                InlineQueryResultArticle(
+                    id="help",
+                    title="📝 Format: username montant",
+                    description="Exemple: testuser 100",
+                    input_message_content=InputTextMessageContent(
+                        "ℹ️ Utilisez le format: @votre_bot username montant\nExemple: @votre_bot testuser 100"
+                    )
+                )
+            ]
+            await update.inline_query.answer(results, cache_time=0)
             return
         
         # Parsing de la requête (username montant)
         parts = query.split()
         
-        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        # Si format incorrect - afficher un message d'aide
         if len(parts) < 2:
-            await update.inline_query.answer([], cache_time=0)
+            results = [
+                InlineQueryResultArticle(
+                    id="error_format",
+                    title="❌ Format incorrect",
+                    description="Utilisez: username montant",
+                    input_message_content=InputTextMessageContent(
+                        f"❌ Format incorrect pour: '{query}'\n\n📝 Format attendu: username montant\nExemple: testuser 100"
+                    )
+                )
+            ]
+            await update.inline_query.answer(results, cache_time=0)
             return
         
         username = parts[0].replace('@', '')  # Supprime @ si présent
@@ -176,8 +196,17 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if ton_amount <= 0:
                 raise ValueError("Montant doit être positif")
         except ValueError:
-            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
-            await update.inline_query.answer([], cache_time=0)
+            results = [
+                InlineQueryResultArticle(
+                    id="error_amount",
+                    title="❌ Montant invalide",
+                    description=f"'{parts[1]}' n'est pas un nombre valide",
+                    input_message_content=InputTextMessageContent(
+                        f"❌ Montant invalide: '{parts[1]}'\n\n💡 Le montant doit être un nombre positif\nExemple: 100 ou 50.5"
+                    )
+                )
+            ]
+            await update.inline_query.answer(results, cache_time=0)
             return
         
         # Génération du message avec le format exact du bot original
@@ -187,7 +216,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         current_ton_price = get_ton_price()
         current_usd_value = ton_amount * current_ton_price
         
-        # Résultat inline - SEULEMENT si format correct
+        # Résultat inline - TOUJOURS affiché si format correct
         results = [
             InlineQueryResultArticle(
                 id=f"deal_{username}_{ton_amount}_{int(time.time())}",
@@ -207,6 +236,21 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
     except Exception as e:
         print(f"❌ Erreur dans inline_query_handler: {e}")
+        # En cas d'erreur, renvoyer un résultat d'erreur
+        try:
+            results = [
+                InlineQueryResultArticle(
+                    id="error_system",
+                    title="❌ Erreur système",
+                    description="Une erreur s'est produite",
+                    input_message_content=InputTextMessageContent(
+                        f"❌ Une erreur s'est produite lors du traitement de votre demande.\n\nErreur: {str(e)}"
+                    )
+                )
+            ]
+            await update.inline_query.answer(results, cache_time=0)
+        except:
+            pass
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
