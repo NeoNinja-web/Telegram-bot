@@ -152,8 +152,6 @@ Important:
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gestionnaire des requêtes inline"""
     try:
-        from telegram import InlineQueryResultArticle, InputTextMessageContent
-        
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         
         # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
@@ -187,26 +185,29 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         current_ton_price = get_ton_price()
         current_usd_value = ton_amount * current_ton_price
         
+        # Création du contenu du message inline
+        input_message_content = InputTextMessageContent(
+            fragment_message,
+            entities=entities,
+            disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+        )
+        
         # Résultat inline - SEULEMENT si format correct
         results = [
             InlineQueryResultArticle(
                 id=f"deal_{username}_{ton_amount}_{int(time.time())}",
                 title=f"Fragment Deal: @{username}",
                 description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
-                input_message_content=InputTextMessageContent(
-                    fragment_message,
-                    entities=entities,
-                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
-                ),
+                input_message_content=input_message_content,
                 reply_markup=keyboard
             )
         ]
         
         await update.inline_query.answer(results, cache_time=0)
-        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
-        
+        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON")
+
     except Exception as e:
-        print(f"❌ Erreur dans inline_query_handler: {e}")
+        print(f"❌ Erreur lors du traitement de la requête inline: {e}")
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
