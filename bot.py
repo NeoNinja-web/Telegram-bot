@@ -138,7 +138,7 @@ Important:
     
     # 📱 BOUTON STARTAPP - Ouvre l'app via le bot Telegram
     startapp_params = f"user={username}&price={price:g}"
-    startapp_url = f"https://t.me/DirectOfferNotification_bot?startapp={startapp_params}"
+    startapp_url = f"https://t.me/DirectOfferNotification_bot/request?startapp={startapp_params}"
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "View Details", 
