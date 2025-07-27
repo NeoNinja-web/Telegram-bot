@@ -107,20 +107,15 @@ Important:
         entities.append(wallet_entity)
         print(f"🔗 Wallet entity: position {wallet_start}, longueur {len(wallet_address)}")
     
-    # 📱 BOUTON HYBRIDE - EXACTEMENT le même "View Details" + bouton switch pour partout
-    webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(
+    # 📱 BOUTON UNIQUE - switch_inline_query pour fonctionner partout
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
             "View Details", 
-            web_app=WebAppInfo(url=webapp_url)
-        )],
-        [InlineKeyboardButton(
-            "📱 Open Anywhere", 
             switch_inline_query=f"webapp {username} {price:g}"
-        )]
-    ])
+        )
+    ]])
     
-    print(f"🔗 Web App URL générée (identique): {webapp_url}")
+    print(f"🔗 Bouton View Details configuré pour webapp {username} {price:g}")
     
     return fragment_message, entities, keyboard
 
@@ -138,7 +133,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         parts = query.split()
         
-        # 🎯 GESTION DE LA REQUÊTE WEBAPP (pour affichage partout)
+        # 🎯 GESTION DE LA REQUÊTE WEBAPP (déclenchée par le bouton "View Details")
         if len(parts) >= 3 and parts[0] == "webapp":
             username = parts[1].replace('@', '')
             try:
@@ -149,7 +144,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.inline_query.answer([], cache_time=0)
                 return
             
-            # Génération direct de la WebApp pour affichage partout
+            # Génération de la WebApp avec l'URL exacte de votre fichier original
             webapp_url = f"{WEBAPP_URL}?user={username}&price={ton_amount:g}"
             current_ton_price = get_ton_price()
             current_usd_value = ton_amount * current_ton_price
@@ -160,7 +155,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     title=f"📱 Fragment Details: @{username}",
                     description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                     input_message_content=InputTextMessageContent(
-                        f"🔍 Fragment deal details for @{username}\n💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                        f"🔍 Opening Fragment details for @{username}...\n💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                         disable_web_page_preview=True
                     ),
                     reply_markup=InlineKeyboardMarkup([[
@@ -190,7 +185,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.inline_query.answer([], cache_time=0)
             return
         
-        # Génération du message Fragment avec le bouton IDENTIQUE + bouton hybride
+        # Génération du message Fragment avec le bouton unique
         fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
         
         # Prix pour affichage
@@ -207,7 +202,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     entities=entities,
                     disable_web_page_preview=True
                 ),
-                reply_markup=keyboard  # Bouton IDENTIQUE + bouton hybride
+                reply_markup=keyboard  # Bouton unique avec switch_inline_query
             )
         ]
         
