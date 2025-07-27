@@ -202,7 +202,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             description=f"💎 {ton_amount:g} TON (${ton_amount * get_ton_price():.2f} USD)",
             input_message_content=InputTextMessageContent(
                 message_text=message_text,
-                entities=entities
+                entities=entities,
+                disable_web_page_preview=True
             ),
             reply_markup=keyboard
         )
