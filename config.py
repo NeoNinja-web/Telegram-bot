@@ -4,7 +4,7 @@ import os
 BOT_TOKEN = os.getenv('BOT_TOKEN', '7975400880:AAFMJ5ya_sMdLLMb7OjSbMYiBr3IhZikE6c')
 
 # Mini App URL
-WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://myminiapp.onrender.com/')
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://myminiapp.onrender.com/request')
 
 # Taux de change TON/USD (ajustable)
 TON_USD_RATE = 3.04
