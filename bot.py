@@ -131,10 +131,10 @@ Important:
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=48,  # Longueur exacte de UQ...PR (48 caractères)
+            length=len(wallet_address),  # Longueur correcte de l'adresse du wallet
             url=f"https://tonviewer.com/{wallet_address}"
         ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
+        print(f"🔗 Wallet link: position {wallet_start}, longueur {len(wallet_address)} caractères")
     
     # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
     startapp_param = f"{username}-{price:g}"
