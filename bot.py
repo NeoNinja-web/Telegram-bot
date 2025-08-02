@@ -125,16 +125,19 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
-    wallet_start = fragment_message.find(wallet_address)
-    if wallet_start != -1:
+    # 5. Wallet cliquable - CORRECTION: chercher "Wallet: " puis calculer la position exacte
+    wallet_prefix = "• Wallet: "
+    wallet_line_start = fragment_message.find(wallet_prefix)
+    if wallet_line_start != -1:
+        # Position exacte du début de l'adresse wallet (après "• Wallet: ")
+        wallet_start = wallet_line_start + len(wallet_prefix)
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=48,  # Longueur exacte de UQ...PR (48 caractères)
+            length=len(wallet_address),  # Longueur exacte de l'adresse (48 caractères)
             url=f"https://tonviewer.com/{wallet_address}"
         ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
+        print(f"🔗 Wallet link: position {wallet_start}, longueur {len(wallet_address)} caractères")
     
     # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
     startapp_param = f"{username}-{price:g}"
