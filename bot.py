@@ -205,8 +205,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                 input_message_content=InputTextMessageContent(
                     fragment_message,
-                    entities=entities,  # ✅ ENTITIES POUR LE GRAS
-                    parse_mode='HTML',  # ✅ HTML POUR LE LIEN WALLET
+                    entities=entities,  # ✅ SEULEMENT ENTITIES (gras + lien)
                     disable_web_page_preview=True
                 ),
                 reply_markup=keyboard
