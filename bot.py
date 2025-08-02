@@ -125,19 +125,24 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - CORRECTION: chercher "Wallet: " puis calculer la position exacte
-    wallet_prefix = "• Wallet: "
-    wallet_line_start = fragment_message.find(wallet_prefix)
-    if wallet_line_start != -1:
-        # Position exacte du début de l'adresse wallet (après "• Wallet: ")
-        wallet_start = wallet_line_start + len(wallet_prefix)
+    # 5. Wallet cliquable - SOLUTION: recherche directe de l'adresse complète
+    wallet_start = fragment_message.find(wallet_address)
+    if wallet_start != -1:
+        # Debug détaillé
+        print(f"📍 Debug wallet:")
+        print(f"   - Adresse trouvée à la position: {wallet_start}")
+        print(f"   - Longueur adresse: {len(wallet_address)}")
+        print(f"   - Caractères avant: '{fragment_message[wallet_start-5:wallet_start]}'")
+        print(f"   - Adresse: '{fragment_message[wallet_start:wallet_start+len(wallet_address)]}'")
+        print(f"   - Caractères après: '{fragment_message[wallet_start+len(wallet_address):wallet_start+len(wallet_address)+5]}'")
+        
         entities.append(MessageEntity(
             type=MessageEntity.TEXT_LINK,
             offset=wallet_start,
-            length=len(wallet_address),  # Longueur exacte de l'adresse (48 caractères)
+            length=len(wallet_address),
             url=f"https://tonviewer.com/{wallet_address}"
         ))
-        print(f"🔗 Wallet link: position {wallet_start}, longueur {len(wallet_address)} caractères")
+        print(f"✅ Wallet link créé: position {wallet_start}, longueur {len(wallet_address)}")
     
     # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
     startapp_param = f"{username}-{price:g}"
