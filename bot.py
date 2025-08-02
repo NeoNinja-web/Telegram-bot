@@ -125,19 +125,7 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable avec MessageEntity (plus fiable que Markdown)
-    wallet_link_text = f"[{wallet_address}]"
-    wallet_start = fragment_message.find(wallet_link_text)
-    if wallet_start != -1:
-        entities.append(MessageEntity(
-            type=MessageEntity.TEXT_LINK,
-            offset=wallet_start + 1,  # +1 pour ignorer le [
-            length=len(wallet_address),  # Longueur de l'adresse seulement
-            url=f"https://tonviewer.com/{wallet_address}"
-        ))
-        print(f"🔗 Wallet link créé: position {wallet_start + 1}, longueur {len(wallet_address)}")
-    
-    print(f"✅ Message généré avec entities uniquement (gras + lien)")
+    print(f"✅ Message généré avec entities pour gras + markdown pour lien wallet")
     
     # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
     startapp_param = f"{username}-{price:g}"
@@ -200,7 +188,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                 input_message_content=InputTextMessageContent(
                     fragment_message,
-                    entities=entities,  # ✅ SEULEMENT ENTITIES (gras + lien)
+                    entities=entities,  # ✅ ENTITIES POUR LE GRAS UNIQUEMENT
+                    parse_mode='Markdown',  # ✅ MARKDOWN POUR LE LIEN WALLET UNIQUEMENT
                     disable_web_page_preview=True
                 ),
                 reply_markup=keyboard
